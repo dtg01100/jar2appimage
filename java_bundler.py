@@ -23,7 +23,7 @@ class JavaBundler:
 
         # Common OpenJDK download URLs
         jdk_urls = {
-            "11": "https://github.com/adoptium/temurin11-jdk{jdk_version_clean}.tar.gz",
+            "11": "https://github.com/adoptium/temurin11-binaries/releases/download/jdk-11.0.23%2B9/OpenJDK11U-jdk_x64_linux_hotspot_11.0.23_9.tar.gz",
         }
 
         jdk_url = jdk_urls.get(self.jdk_version, jdk_urls.get("11"))
@@ -153,6 +153,8 @@ def main():
     jar_file = sys.argv[1]
     app_name = sys.argv[2] if len(sys.argv) > 2 else Path(jar_file).stem
     output_dir = sys.argv[3] if len(sys.argv) > 3 else "."
+
+    app_name_clean = app_name.replace(" ", "-").lower()
 
     if not os.path.exists(jar_file):
         print(f"❌ JAR file not found: {jar_file}")

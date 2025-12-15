@@ -26,7 +26,7 @@ class Jar2AppImage:
             'smart_gui_detection': True,
             'platform_specific_opts': True,
             'professional_desktop_integration': True,
-            'comprehensive_error_handling': True
+            'comprehensive_error_handling': True,
             'java_dependency_management': True,
             'appimage_creation': True
         }
@@ -39,7 +39,7 @@ class Jar2AppImage:
         self._app_name = ""
         self._main_class = ""
     
-    def create(self) -> str: str:
+    def create(self) -> str:
         """Create enhanced AppImage with optional Java bundling"""
         
         # Extract application name from JAR path
@@ -198,7 +198,7 @@ Comment=Java application packaged as AppImage
 Exec=AppRun
 Icon={app_name}
 Categories=Development;Utility;
-Terminal={{"true" if needs_terminal else "false"}
+        Terminal={"true" if needs_terminal else "false"}
 StartupNotify=true
 StartupWMClass=java
 Keywords=java;jar;{app_name};
