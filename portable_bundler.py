@@ -10,7 +10,29 @@ import shutil
 from pathlib import Path
 
 
-def create_portable_appimage(jar_file, app_name="SQLWorkbench", output_dir="."):
+def get_system_architecture():
+    """Get the system architecture for AppImage creation"""
+    import platform
+
+    machine = platform.machine().lower()
+
+    # Map common architectures
+    arch_map = {
+        "x86_64": "x86_64",
+        "amd64": "x86_64",
+        "aarch64": "aarch64",
+        "arm64": "aarch64",
+        "armv7l": "armhf",
+        "i386": "i386",
+        "i686": "i386",
+    }
+
+    return arch_map.get(machine, "x86_64")  # Default to x86_64
+
+
+def create_portable_appimage(
+    jar_file, app_name="SQLWorkbench", output_dir=".", arch=None
+):
     """Create a portable AppImage that uses bundled Java or system Java"""
 
     jar_file = Path(jar_file)
@@ -19,7 +41,8 @@ def create_portable_appimage(jar_file, app_name="SQLWorkbench", output_dir="."):
         return None
 
     output_dir = Path(output_dir)
-    app_dir = output_dir / f"{app_name}-Portable.AppImage"
+    app_dir_name = f"{app_name.replace(' ', '-').lower()}-portable"
+    app_dir = output_dir / f"{app_dir_name}.AppImage"
 
     print(f"🚀 Creating portable AppImage for {app_name}...")
 
@@ -64,11 +87,12 @@ def create_portable_appimage(jar_file, app_name="SQLWorkbench", output_dir="."):
     # (In real implementation, this would download and bundle Java)
 
     # Step 4: Create smart AppRun script that prioritizes bundled Java
+    jar_name = app_name.lower()
     apprun_content = f"""#!/bin/sh
-HERE="$(dirname "$(readlink -f "${{0}}")"
+HERE="$(dirname "$(readlink -f "$0")")"
 
 # Get JAR file path
-JAR_FILE="${{HERE}}/usr/bin/{app_name.lower()}.jar"
+JAR_FILE="$HERE/usr/bin/{jar_name}.jar"
 
 # Check if JAR exists
 if [ ! -f "$JAR_FILE" ]; then
@@ -78,7 +102,7 @@ fi
 
 # Build classpath with dependencies
 CLASSPATH="$JAR_FILE"
-LIB_DIR="${{HERE}}/usr/lib"
+LIB_DIR="$HERE/usr/lib"
 if [ -d "$LIB_DIR" ]; then
     for jar in "$LIB_DIR"/*.jar; do
         if [ -f "$jar" ]; then
@@ -88,23 +112,23 @@ if [ -d "$LIB_DIR" ]; then
 fi
 
 # Priority 1: Try bundled Java (if available)
-BUNDLED_JAVA="${{HERE}}/usr/java/bin/java"
+BUNDLED_JAVA="$HERE/usr/java/bin/java"
 if [ -f "$BUNDLED_JAVA" ]; then
-    export JAVA_HOME="${{HERE}}/usr/java"
-    export PATH="${{HERE}}/usr/java/bin:$PATH"
+    export JAVA_HOME="$HERE/usr/java"
+    export PATH="$HERE/usr/java/bin:$PATH"
     JAVA_CMD="$BUNDLED_JAVA"
-    echo "✅ Using bundled Java: $("$JAVA_CMD" -version 2>&1 | head -1)"
+    echo "✅ Using bundled Java: $($JAVA_CMD -version 2>&1 | head -1)"
 else
     # Priority 2: Fall back to system Java
     JAVA_CMD="java"
     if command -v "$JAVA_CMD" >/dev/null 2>&1; then
-        echo "✅ Using system Java: $("$JAVA_CMD" -version 2>&1 | head -1)"
+        echo "✅ Using system Java: $($JAVA_CMD -version 2>&1 | head -1)"
     else
         echo "❌ No Java runtime found - neither bundled nor system Java available"
         echo ""
         echo "To create a fully portable AppImage with bundled Java:"
         echo "1. Download OpenJDK 11 or later"
-        echo "2. Extract to ${{HERE}}/usr/java/"
+        echo "2. Extract to $HERE/usr/java/"
         echo "3. Re-run this AppImage"
         exit 1
     fi
@@ -138,21 +162,21 @@ exec "$JAVA_CMD" -cp "$CLASSPATH" workbench.sql.Workbench "$@"
 Type=Application
 Name={app_name}
 Comment=SQL Workbench - Portable Database Tool
-Exec={app_name}
-Icon={app_name.lower()}
+Exec={app_dir_name}
+Icon={app_dir_name.lower()}
 Categories=Development;Database;
 Terminal=false
 StartupNotify=true
 """
 
     # Create desktop file at root (appimagetool looks for it here)
-    root_desktop_path = app_dir / f"{app_name.lower()}.desktop"
+    root_desktop_path = app_dir / f"{app_dir_name}.desktop"
     with open(root_desktop_path, "w") as f:
         f.write(desktop_content)
     print(f"📝 Created root desktop file: {root_desktop_path}")
 
     # Also create in usr/share/applications
-    desktop_path = usr_share_app_dir / f"{app_name.lower()}.desktop"
+    desktop_path = usr_share_app_dir / f"{app_dir_name}.desktop"
     with open(desktop_path, "w") as f:
         f.write(desktop_content)
     print(f"📝 Created usr desktop file: {desktop_path}")
@@ -166,15 +190,27 @@ StartupNotify=true
     icon_copied = False
     for icon_path in icon_paths:
         if icon_path.exists():
+            # Copy icon to root of AppDir (appimagetool expects it here)
+            root_icon_path = app_dir / f"{app_dir_name}.png"
+            shutil.copy2(icon_path, root_icon_path)
+            print(f"🖼️  Copied icon to root: {root_icon_path}")
+
+            # Also copy to icons directory
             icons_dir = usr_dir / "share" / "icons"
             icons_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(icon_path, icons_dir / f"{app_name.lower()}.png")
-            print(f"🖼️  Copied icon: {icon_path}")
+            shutil.copy2(icon_path, icons_dir / f"{app_dir_name}.png")
             icon_copied = True
             break
 
     if not icon_copied:
-        print("⚠️  No icon found")
+        # Create minimal icon in root
+        root_icon_path = app_dir / f"{app_dir_name}.png"
+        with open(root_icon_path, "wb") as f:
+            # Minimal 1x1 transparent PNG
+            f.write(
+                b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xdb\x00\x00\x00\x00IEND\xaeB`\x82"
+            )
+        print(f"🖼️  Created minimal icon: {root_icon_path}")
 
     # Step 7: Create bundled Java placeholder directory
     java_placeholder = usr_java_dir / "README.md"
@@ -205,18 +241,41 @@ This AppImage is designed to be portable with bundled Java runtime.
 
     # Step 8: Create final AppImage
     if Path("./appimagetool").exists():
-        print(f"🔧 Creating final AppImage...")
+        # Determine architecture
+        if arch is None:
+            arch = get_system_architecture()
+        print(f"🔧 Creating final AppImage for {arch}...")
+
         try:
+            env = os.environ.copy()
+            env["ARCH"] = arch
+
             result = subprocess.run(
                 ["./appimagetool", "--no-appstream", str(app_dir)],
                 capture_output=True,
                 text=True,
                 cwd=output_dir,
+                env=env,
             )
 
             if result.returncode == 0:
-                final_appimage = output_dir / f"{app_name}-Portable.AppImage"
-                if final_appimage.exists():
+                # appimagetool creates AppImage with the desktop file name
+                # Check for the most likely names
+                possible_names = [
+                    f"{app_name}-x86_64.AppImage",
+                    f"{app_dir_name}-x86_64.AppImage",
+                    f"{app_name}.AppImage",
+                    f"{app_dir_name}.AppImage",
+                ]
+
+                final_appimage = None
+                for name in possible_names:
+                    candidate = output_dir / name
+                    if candidate.exists():
+                        final_appimage = candidate
+                        break
+
+                if final_appimage and final_appimage.exists():
                     size_mb = final_appimage.stat().st_size // (1024 * 1024)
                     print(f"✅ Portable AppImage created: {final_appimage}")
                     print(f"📦 Size: {size_mb} MB")
@@ -239,23 +298,46 @@ This AppImage is designed to be portable with bundled Java runtime.
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python3 portable_bundler.py <jar_file> [app_name] [output_dir]")
-        print("")
-        print("Creates a portable AppImage with smart Java handling:")
-        print("  • Uses system Java if available")
-        print("  • Ready for Java bundling with simple instructions")
-        print("  • Includes all JAR dependencies")
-        print("  • Professional desktop integration")
-        print("")
-        print("Example: python3 portable_bundler.py sqlworkbench.jar SQLWorkbench .")
-        sys.exit(1)
+    import argparse
 
-    jar_file = sys.argv[1]
-    app_name = sys.argv[2] if len(sys.argv) > 2 else "SQLWorkbench"
-    output_dir = sys.argv[3] if len(sys.argv) > 3 else "."
+    parser = argparse.ArgumentParser(
+        description="Create portable AppImage with smart Java handling",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
 
-    result = create_portable_appimage(jar_file, app_name, output_dir)
+    parser.add_argument("jar_file", help="JAR file to convert")
+    parser.add_argument(
+        "--name",
+        "-n",
+        default="SQLWorkbench",
+        help="Application name (default: SQLWorkbench)",
+    )
+    parser.add_argument(
+        "--output", "-o", default=".", help="Output directory (default: current)"
+    )
+    parser.add_argument(
+        "--arch",
+        "-a",
+        help=f"Target architecture (default: auto-detected, current: {get_system_architecture()})",
+    )
+
+    parser.add_argument(
+        "--help-examples", action="store_true", help="Show usage examples"
+    )
+
+    args = parser.parse_args()
+
+    if args.help_examples:
+        print("Examples:")
+        print("  python3 portable_bundler.py myapp.jar")
+        print("  python3 portable_bundler.py myapp.jar --name 'My App'")
+        print(
+            f"  python3 portable_bundler.py myapp.jar --arch {get_system_architecture()}"
+        )
+        print("  python3 portable_bundler.py myapp.jar -n SQLWorkbench -o ~/Desktop")
+        sys.exit(0)
+
+    result = create_portable_appimage(args.jar_file, args.name, args.output, args.arch)
     if result:
         print(f"\n🎉 Success! Created: {result}")
         print(f"📱 This AppImage is portable and includes smart Java handling!")
