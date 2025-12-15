@@ -1,0 +1,9 @@
+# Core dependencies for jar2appimage
+requests>=2.25.0
+click>=8.0.0
+
+# Development dependencies (optional)
+# pytest>=7.0.0
+# black>=22.0.0
+# ruff>=0.1.0
+# mypy>=1.0.0

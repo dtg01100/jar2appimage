@@ -1,0 +1,32 @@
+author: Your Name
+bundled_java: true
+category: Development
+classpath: []
+cleanup: true
+dependencies:
+- lib1.jar
+- lib2.jar
+description: A sample Java application packaged as AppImage
+environment:
+  JAVA_OPTS: -Xmx512m
+icon: myapp.png
+jar_path: myapp.jar
+java_options:
+- -Xmx512m
+- -Dapp.name=myapp
+java_version: '11'
+keywords:
+- java
+- application
+libraries: []
+license: MIT
+main_class: com.example.MyApp
+mime_types: []
+name: My Application
+output_dir: ./dist
+startup_notify: true
+terminal: null
+validate: true
+verbose: false
+version: 1.0.0
+website: https://github.com/yourname/myapp

@@ -1,0 +1,8 @@
+*.AppImage
+*_validation_report.txt
+__pycache__/
+*.pyc
+*.tmp
+squashfs-root/
+test_jars/apache-ant-1.10.13/
+

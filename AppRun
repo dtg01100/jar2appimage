@@ -1,0 +1,121 @@
+#!/bin/sh
+HERE="$(dirname "$(readlink -f "${0}")")"
+export PATH="${HERE}/usr/bin/:${PATH}"
+export LD_LIBRARY_PATH="${HERE}/usr/lib/:${LD_LIBRARY_PATH}"
+
+# Enhanced Java dependency checking
+JAVA_CMD=""
+for candidate in "java" "/usr/bin/java" "/usr/local/bin/java"; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        JAVA_CMD="$candidate"
+        echo "✅ Found Java: $JAVA_CMD"
+        break
+    fi
+done
+
+if [ -z "$JAVA_CMD" ]; then
+    echo "❌ No Java runtime found on system."
+    echo "Please install Java 11 or later:"
+    echo "  - Ubuntu/Debian: sudo apt install openjdk-11-jre"
+    echo "  - RHEL/CentOS: sudo yum install java-11-openjdk"
+    echo "  - Arch Linux: sudo pacman -S jdk11-openjdk"
+    echo "  - Homebrew: brew install openjdk@11"
+    echo "  - Download: https://adoptium.net/"
+    exit 1
+fi
+
+# Test Java is actually working
+if ! "$JAVA_CMD" -version >/dev/null 2>&1; then
+    echo "❌ Java found but not working: $JAVA_CMD"
+    exit 1
+fi
+
+echo "✅ Java runtime validated: $("$JAVA_CMD" -version 2>&1 | head -1)"
+
+# Get JAR file path
+JAR_FILE="${HERE}/usr/bin/sqlworkbench.jar"
+
+# Check if JAR exists
+if [ ! -f "$JAR_FILE" ]; then
+    echo "Error: JAR file not found: $JAR_FILE"
+    exit 1
+fi
+
+# Build classpath with dependencies
+CLASSPATH="$JAR_FILE"
+LIB_DIR="${HERE}/usr/lib"
+if [ -d "$LIB_DIR" ]; then
+    for jar in "$LIB_DIR"/*.jar; do
+        if [ -f "$jar" ]; then
+            CLASSPATH="$CLASSPATH:$jar"
+        fi
+    done
+fi
+
+# Read detected main class if available
+MAIN_CLASS_FILE="${HERE}/.main_class"
+if [ -f "$MAIN_CLASS_FILE" ]; then
+    MAIN_CLASS="$(cat "$MAIN_CLASS_FILE")"
+    echo "Using detected main class: $MAIN_CLASS"
+fi
+
+# Detect if this is a GUI application
+GUI_MODE=false
+if [ -n "$MAIN_CLASS" ]; then
+    case "$MAIN_CLASS" in
+        *workbench*|*swing*|*gui*|*app*|*interface*|*frame*|*panel*)
+            GUI_MODE=true
+            ;;
+        *)
+            GUI_MODE=false
+            ;;
+    esac
+fi
+
+# Set up Java options for GUI applications
+if [ "$GUI_MODE" = "true" ]; then
+    # Standard GUI Java options
+    JAVA_OPTS="--add-opens java.desktop/com.sun.java.swing.plaf.motif=ALL-UNNAMED"
+    JAVA_OPTS="$JAVA_OPTS --add-opens java.desktop/com.sun.java.swing.plaf.gtk=ALL-UNNAMED"
+    
+    # Check operating system for specific options
+    OS_NAME="$(uname -s)"
+    case "$OS_NAME" in
+        Darwin)
+            JAVA_OPTS="$JAVA_OPTS --add-opens java.desktop/com.apple.laf=ALL-UNNAMED"
+            ;;
+        Linux)
+            JAVA_OPTS="$JAVA_OPTS -Dawt.useSystemAAFontSettings=on"
+            ;;
+    esac
+    
+    export JAVA_OPTS
+fi
+
+# Try to run as -jar first (if Main-Class is defined)
+if "$JAVA_CMD" -jar "$JAR_FILE" "$@" 2>/dev/null; then
+    exit 0
+fi
+
+# Fallback to using detected main class if available
+if [ -n "$MAIN_CLASS" ]; then
+    echo "Using detected main class: $MAIN_CLASS"
+    if [ "$GUI_MODE" = "true" ]; then
+        exec "$JAVA_CMD" $JAVA_OPTS -cp "$CLASSPATH" "$MAIN_CLASS" "$@"
+    else
+        exec "$JAVA_CMD" -cp "$CLASSPATH" "$MAIN_CLASS" "$@"
+    fi
+else
+    # Fallback: try common main class patterns
+    for candidate in "sqlworkbench" "Main" "App" "executable.Main" "Application"; do
+        if "$JAVA_CMD" -cp "$CLASSPATH" "$candidate" --help >/dev/null 2>&1; then
+            echo "Trying main class: $candidate"
+            exec "$JAVA_CMD" "$candidate" "$@"
+        fi
+    done
+fi
+
+echo "Error: Cannot determine main class from JAR"
+echo "Available classes in JAR:"
+jar tf "$JAR_FILE" | grep "\.class$" | head -5
+exit 1
