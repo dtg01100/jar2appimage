@@ -5,4 +5,7 @@ __pycache__/
 *.tmp
 squashfs-root/
 test_jars/apache-ant-1.10.13/
+appimagetool
+appimagetool-*
+AppRun
 

@@ -5,6 +5,7 @@ A Python tool to convert Java JAR files into portable AppImage executables.
 ## Features
 
 - Converts JAR files to AppImage format
+- **Automatic on-demand download of appimagetool** - no need to install separately
 - Supports bundled Java runtime or system Java usage
 - Automatic Java version detection and downloading
 - JAR dependency analysis and classpath management
@@ -13,36 +14,55 @@ A Python tool to convert Java JAR files into portable AppImage executables.
 
 ## Requirements
 
-- Python 3.6+
-- Linux system
-- appimagetool (AppImageKit)
+- Python 3.8+
+- Linux system (x86_64 or aarch64)
+- Internet connection (for first-time appimagetool download)
 
 ## Installation
 
-Clone the repository:
+### Using uv (recommended)
+
+```bash
+# Install using uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+cd jar2appimage
+bash install.sh
+```
+
+### Manual installation
 
 ```bash
 git clone https://github.com/dtg01100/jar2appimage.git
 cd jar2appimage
+uv tool install .
 ```
 
 ## Usage
 
-Basic usage with system Java:
+Basic usage:
 ```bash
-python3 portable_bundler.py your-app.jar
+jar2appimage your-app.jar
 ```
 
-With bundled Java:
+With custom output directory:
 ```bash
-python3 auto_java_bundler.py your-app.jar --name "My App"
+jar2appimage your-app.jar --output ~/Applications
 ```
 
-### Scripts
+### First Run
 
-- `portable_bundler.py`: Creates AppImage using system Java
-- `auto_java_bundler.py`: Downloads and bundles Java runtime
-- `smart_java_bundler.py`: Discovers Java download URLs
+On first use, `jar2appimage` will automatically download `appimagetool` to `~/.cache/jar2appimage/`. Subsequent runs will use the cached version.
+
+### Manual appimagetool Installation
+
+If you prefer to use a system-installed `appimagetool`, it will be detected and used automatically:
+
+```bash
+# Download appimagetool manually
+wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+chmod +x appimagetool-x86_64.AppImage
+sudo mv appimagetool-x86_64.AppImage /usr/local/bin/appimagetool
+```
 
 ### Options
 

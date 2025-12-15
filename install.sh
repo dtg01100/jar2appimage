@@ -7,14 +7,20 @@ echo "🚀 Installing jar2appimage with uv..."
 
 # Check if uv is installed
 if ! command -v uv &> /dev/null; then
-    echo "📦 Installing uv..."
+    echo "📦 Installing uv tool..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
-    export PATH="$HOME/.cargo/bin:$PATH"
+    
+    # Verify uv installation
+    if ! command -v uv &> /dev/null; then
+        echo "❌ Failed to install uv tool"
+        exit 1
+    fi
+    echo "✅ uv tool installed successfully"
 fi
 
-# Install the package in development mode
+# Install jar2appimage as a tool
 echo "🔧 Installing jar2appimage..."
-uv pip install -e .
+uv tool install .
 
 # Verify installation
 if command -v jar2appimage &> /dev/null; then
@@ -22,11 +28,10 @@ if command -v jar2appimage &> /dev/null; then
     echo ""
     echo "🎯 Usage examples:"
     echo "  jar2appimage myapp.jar"
-    echo "  jar2appimage myapp.jar -n 'My App' -o ~/Applications"
-    echo "  jar2appimage myapp.jar --java-version 21 --verbose"
+    echo "  jar2appimage myapp.jar --output ~/Applications"
     echo ""
     echo "📚 For more help: jar2appimage --help"
 else
-    echo "❌ Installation failed. Please check the output above."
+    echo "❌ Installation failed. jar2appimage command not found."
     exit 1
 fi

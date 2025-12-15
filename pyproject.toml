@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "jar2appimage"
-version = "0.1.0"
+version = "0.1.2"
 description = "Convert Java JAR files to portable AppImages"
 readme = "README.md"
 license = "MIT"
@@ -32,6 +32,9 @@ dependencies = [
     "click>=8.0.0",
 ]
 
+[project.scripts]
+jar2appimage = "jar2appimage.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
@@ -46,9 +49,6 @@ Homepage = "https://github.com/your-org/jar2appimage"
 Repository = "https://github.com/your-org/jar2appimage"
 Documentation = "https://github.com/your-org/jar2appimage#readme"
 "Bug Tracker" = "https://github.com/your-org/jar2appimage/issues"
-
-[project.scripts]
-jar2appimage = "jar2appimage.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/jar2appimage"]

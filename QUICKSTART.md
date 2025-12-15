@@ -53,16 +53,18 @@ jar2appimage sqlworkbench.jar -n "SQL Workbench/J" -o ~/Applications
 - ✅ **Automatic Dependencies** - Analyzes and bundles JAR dependencies
 - ✅ **Cross-Platform** - Runs on any Linux distribution
 - ✅ **Java LTS Versions** - Uses stable Java 8/11/17/21/23 LTS releases
-- ✅ **On-Demand Downloads** - Downloads JRE and tools as needed
+- ✅ **On-Demand Downloads** - Downloads appimagetool and JRE as needed (no manual setup)
 - ✅ **Desktop Integration** - Creates proper .desktop entries
+- ✅ **Smart Caching** - Downloads tools once, reuses them forever
 
 ## How It Works
 
 1. **Analyze** - Reads JAR manifest and class dependencies
-2. **Download** - Fetches portable JDK/JRE from Adoptium LTS releases
-3. **Extract** - Creates minimal JRE with essential binaries and libraries
-4. **Bundle** - Copies JAR, dependencies, and JRE into AppDir
-5. **Package** - Creates modern AppImage using appimagetool
+2. **Download Tools** - Fetches appimagetool on first run (cached in `~/.cache/jar2appimage/`)
+3. **Download Java** - (Optional) Fetches portable JDK/JRE from Adoptium LTS releases
+4. **Extract** - Creates minimal JRE with essential binaries and libraries
+5. **Bundle** - Copies JAR, dependencies, and JRE into AppDir
+6. **Package** - Creates modern AppImage using appimagetool
 
 ## Output
 

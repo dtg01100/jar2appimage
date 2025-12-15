@@ -11,7 +11,20 @@ class JavaRuntimeManager:
     """Manages Java runtime environments"""
 
     def __init__(self):
-        pass
+        import tempfile
+        self.temp_dir = Path(tempfile.mkdtemp(prefix="java_runtime_"))
+    
+    def cleanup(self):
+        """Clean up temporary directory"""
+        if self.temp_dir.exists():
+            shutil.rmtree(self.temp_dir)
+    
+    def get_system_java(self):
+        """Get system Java path if available"""
+        java_cmd = shutil.which("java")
+        if java_cmd:
+            return Path(java_cmd)
+        return None
 
     def get_runtime(self, version: str = "11"):
         """Get Java runtime for specified version"""
