@@ -5,14 +5,11 @@ Implements parallel processing for various operations
 """
 
 import os
-import sys
-import threading
-import concurrent.futures
+import queue
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import List, Dict, Optional, Callable, Any
-import time
-import queue
+from typing import Any, Callable, Dict, List
 
 
 class ParallelProcessor:
@@ -103,6 +100,25 @@ class ParallelProcessor:
             except Exception as e:
                 return {"jar_path": jar_path, "success": False, "error": str(e)}
 
+        results = []
+        with ThreadPoolExecutor(
+            max_workers=min(self.max_workers, len(jar_files))
+        ) as executor:
+            future_to_jar = {
+                executor.submit(analyze_single_jar, jar): jar for jar in jar_files
+            }
+
+            for future in as_completed(future_to_jar):
+                result = future.result()
+                results.append(result)
+
+                if result["success"]:
+                    print(f"  ✅ Analyzed: {Path(result['jar_path']).name}")
+                else:
+                    print(
+                        f"  ❌ Failed: {Path(result['jar_path']).name} - {result.get('error', 'Unknown error')}"
+                    )
+
         return {
             "total_jars": len(jar_files),
             "successful": len([r for r in results if r["success"]]),
@@ -175,20 +191,12 @@ class ParallelProcessor:
                 executor.submit(validate_single_jar, jar): jar for jar in jar_files
             }
 
-        results = []
-        with ThreadPoolExecutor(
-            max_workers=min(self.max_workers, len(jar_files))
-        ) as executor:
-            future_to_jar = {
-                executor.submit(analyze_single_jar, jar): jar for jar in jar_files
-            }
-
             for future in as_completed(future_to_jar):
                 result = future.result()
                 results.append(result)
 
                 if result["success"]:
-                    print(f"  ✅ Analyzed: {Path(result['jar_path']).name}")
+                    print(f"  ✅ Validated: {Path(result['jar_path']).name}")
                 else:
                     print(
                         f"  ❌ Failed: {Path(result['jar_path']).name} - {result.get('error', 'Unknown error')}"
