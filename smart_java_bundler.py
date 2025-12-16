@@ -4,6 +4,7 @@ Smart Java bundler for jar2appimage - Automatically discovers and downloads Open
 """
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -13,7 +14,10 @@ import tarfile
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional, cast
+
+# Configure module-level logger
+logger = logging.getLogger(__name__)
 
 
 class SmartJavaBundler:
@@ -22,8 +26,8 @@ class SmartJavaBundler:
     def __init__(self, java_version: str = "17", use_jre: bool = True):
         self.java_version = java_version
         self.use_jre = use_jre  # Use JRE (smaller) vs JDK (full)
-        self.bundled_java_path = None
-        self.cache = {}  # Cache for API responses
+        self.bundled_java_path: Optional[str] = None
+        self.cache: Dict[str, Any] = {}  # Cache for API responses
 
     def _find_java_download_url(self) -> Optional[str]:
         """Find the correct OpenJDK download URL for the specified version"""
@@ -31,6 +35,7 @@ class SmartJavaBundler:
         print(
             f"🔍 Finding Java {self.java_version} {'JRE' if self.use_jre else 'JDK'} download URL..."
         )
+        logger.info(f"Finding Java {self.java_version} {'JRE' if self.use_jre else 'JDK'} download URL")
 
         # Try GitHub API first with proper headers
         try:
@@ -56,7 +61,8 @@ class SmartJavaBundler:
                     and name.endswith(".tar.gz")
                     and "hotspot" in name
                 ):
-                    download_url = asset.get("browser_download_url")
+                    download_url = cast(Optional[str], asset.get("browser_download_url"))
+                    logger.info(f"Found {package_type.upper()}: {name}")
                     print(f"✅ Found {package_type.upper()}: {name}")
                     return download_url
 
@@ -66,6 +72,7 @@ class SmartJavaBundler:
             json.JSONDecodeError,
         ) as e:
             print(f"⚠️  GitHub API failed: {e}")
+            logger.warning(f"GitHub API failed: {e}")
 
         # Fallback to manual URL construction for common versions
         return self._get_fallback_url()
@@ -90,10 +97,11 @@ class SmartJavaBundler:
 
         for asset in assets:
             name = asset.get("name", "")
-            download_url = asset.get("browser_download_url", "")
+            download_url = cast(Optional[str], asset.get("browser_download_url", ""))
 
             for pattern in filename_patterns:
                 if re.match(pattern, name):
+                    logger.info(f"Found matching asset: {name}")
                     print(f"✅ Found matching asset: {name}")
                     return download_url
 
@@ -125,11 +133,13 @@ class SmartJavaBundler:
 
         if package_type in version_fallbacks:
             url = version_fallbacks[package_type]
+            logger.info(f"Using fallback URL for Java {self.java_version} {package_type}: {url}")
             print(
                 f"📋 Using fallback URL for Java {self.java_version} {package_type}: {url}"
             )
             return url
 
+        logger.error(f"No download URL found for Java {self.java_version} {package_type}")
         print(f"❌ No download URL found for Java {self.java_version} {package_type}")
         return None
 
@@ -142,10 +152,12 @@ class SmartJavaBundler:
         print(
             f"🔍 Finding Java {self.java_version} {'JRE' if self.use_jre else 'JDK'} download..."
         )
+        logger.info(f"Finding Java {self.java_version} {'JRE' if self.use_jre else 'JDK'} download")
 
         download_url = self._find_java_download_url()
         if not download_url:
             print(f"❌ Could not find download URL for Java {self.java_version}")
+            logger.error(f"Could not find download URL for Java {self.java_version}")
             return None
 
         # Extract filename from URL
@@ -154,6 +166,7 @@ class SmartJavaBundler:
 
         print(f"📥 Downloading: {filename}")
         print(f"   URL: {download_url}")
+        logger.info(f"Downloading: {filename} from {download_url}")
 
         try:
             # Use curl for reliable downloads
@@ -166,18 +179,22 @@ class SmartJavaBundler:
 
             if java_path.exists():
                 size_mb = java_path.stat().st_size // (1024 * 1024)
+                logger.info(f"Java {self.java_version} downloaded successfully: {filename} ({size_mb} MB)")
                 print(
                     f"✅ Java {self.java_version} downloaded: {filename} ({size_mb} MB)"
                 )
                 return str(java_path)
             else:
+                logger.error("Download completed but file not found")
                 print("❌ Download completed but file not found")
                 return None
 
         except subprocess.CalledProcessError as e:
+            logger.error(f"Download failed: {e}")
             print(f"❌ Download failed: {e}")
             return None
         except Exception as e:
+            logger.error(f"Download error: {e}")
             print(f"❌ Download error: {e}")
             return None
 
@@ -188,6 +205,7 @@ class SmartJavaBundler:
         extract_dir_path.mkdir(parents=True, exist_ok=True)
 
         print("📦 Extracting Java archive...")
+        logger.info(f"Extracting Java archive from {java_archive}")
 
         try:
             with tarfile.open(java_archive, "r:gz") as tar:
@@ -215,6 +233,7 @@ class SmartJavaBundler:
                     break
 
             if not java_dir:
+                logger.error("Could not find Java directory after extraction")
                 print("❌ Could not find Java directory after extraction")
                 return None
 
@@ -228,10 +247,12 @@ class SmartJavaBundler:
             # Clean up temp directory
             shutil.rmtree(temp_extract, ignore_errors=True)
 
+            logger.info(f"Java extracted to: {final_java_dir}")
             print(f"✅ Java extracted to: {final_java_dir}")
             return str(final_java_dir)
 
         except Exception as e:
+            logger.error(f"Extraction failed: {e}")
             print(f"❌ Extraction failed: {e}")
             return None
 
@@ -244,6 +265,7 @@ class SmartJavaBundler:
         appimage_java_dir.mkdir(parents=True, exist_ok=True)
 
         print(f"📋 Bundling Java into AppImage: {appimage_java_dir}")
+        logger.info(f"Bundling Java into AppImage: {appimage_java_dir}")
 
         try:
             # Copy Java files
@@ -261,13 +283,16 @@ class SmartJavaBundler:
             # Verify Java binary exists
             java_binary = appimage_java_dir / "bin" / "java"
             if java_binary.exists():
+                logger.info(f"Java bundled successfully: {java_binary}")
                 print(f"✅ Java bundled successfully: {java_binary}")
                 return True
             else:
+                logger.error(f"Java binary not found: {java_binary}")
                 print(f"❌ Java binary not found: {java_binary}")
                 return False
 
         except Exception as e:
+            logger.error(f"Failed to bundle Java: {e}")
             print(f"❌ Failed to bundle Java: {e}")
             return False
 
@@ -291,6 +316,9 @@ def get_java_download_url(
 
 if __name__ == "__main__":
     import argparse
+
+    # Setup logging for CLI mode
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
     parser = argparse.ArgumentParser(description="Smart Java bundler for jar2appimage")
     parser.add_argument(

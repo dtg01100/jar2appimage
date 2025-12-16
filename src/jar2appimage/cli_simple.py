@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mypy: ignore-errors
 """
-jar2appimage Unified CLI Interface
+jar2appimage Unified CLI Interface (Simplified)
 Main entry point for the jar2appimage command line interface
 
 This module provides a unified CLI that consolidates all existing implementations
@@ -12,10 +12,18 @@ import logging
 import sys
 from typing import TYPE_CHECKING, Optional
 
-from .cli_commands import handle_command
-from .cli_help import show_help
-from .cli_parser import create_unified_parser
-from .cli_utils import setup_logging
+# Import CLI components
+try:
+    from .cli_commands import handle_command
+    from .cli_help import show_help
+    from .cli_parser import create_unified_parser
+    from .cli_utils import setup_logging
+except ImportError:
+    # For testing outside the package
+    from cli_commands import handle_command
+    from cli_help import show_help
+    from cli_parser import create_unified_parser
+    from cli_utils import setup_logging
 
 if TYPE_CHECKING:
     from .cli_parser import CLIParser
@@ -34,9 +42,6 @@ class UnifiedCLI:
         """Setup the CLI components"""
         # Create parser
         self.parser = create_unified_parser()
-
-        # Setup logging
-        # Note: logging will be setup after parsing arguments to know verbosity level
 
     def parse_arguments(self, args: Optional[list[str]] = None) -> tuple[bool, Optional[object]]:
         """Parse command line arguments"""
@@ -68,20 +73,21 @@ class UnifiedCLI:
     def handle_help_commands(self, args: object) -> bool:
         """Handle help-related commands before main processing"""
         # Handle help subcommands
-        if hasattr(args, 'command') and args.command in ['examples', 'troubleshoot', 'best-practices', 'version']:
-            if args.command == 'examples':
+        command = getattr(args, 'command', None)
+        if command and command in ['examples', 'troubleshoot', 'best-practices', 'version']:
+            if command == 'examples':
                 category = getattr(args, 'category', None)
                 show_help('examples', category)
                 return True
-            elif args.command == 'troubleshoot':
+            elif command == 'troubleshoot':
                 issue = getattr(args, 'issue', None)
                 show_help('troubleshoot', issue)
                 return True
-            elif args.command == 'best-practices':
+            elif command == 'best-practices':
                 topic = getattr(args, 'topic', None)
                 show_help('best-practices', topic)
                 return True
-            elif args.command == 'version':
+            elif command == 'version':
                 json_output = getattr(args, 'json', False)
                 show_help('version', json=json_output)
                 return True
@@ -130,30 +136,27 @@ class UnifiedCLI:
 
 
 def main(args: Optional[list[str]] = None) -> int:
-    """
-    Main entry point for the CLI
-
-    Args:
-        args: Command line arguments (default: sys.argv[1:])
-
-    Returns:
-        Exit code
-    """
+    """Main entry point for the CLI"""
     cli = UnifiedCLI()
     return cli.run(args)
 
 
-def _convert_legacy_args(args: Optional[list[str]]) -> tuple[Optional[int], list[str]]:  # noqa: C901
-    """Convert legacy CLI arguments into the new unified format.
+def run_legacy_cli(args: Optional[list[str]] = None) -> int:
+    """Run legacy CLI for backward compatibility"""
+    exit_code, legacy_args = _convert_legacy_args(args)
+    if exit_code is not None:
+        return exit_code
 
-    This is split into two simpler phases: 1) short-circuit show-help flags,
-    2) convert the remaining args in a compact mapping pass.
-    Returns (exit_code, converted_args).
-    """
+    cli = UnifiedCLI()
+    return cli.run(legacy_args)
+
+
+def _convert_legacy_args(args: Optional[list[str]]) -> tuple[Optional[int], list[str]]:  # noqa: C901
+    """Convert legacy CLI arguments into the new unified format."""
     if args is None:
         args = sys.argv[1:]
 
-    # Phase 1: short-circuit help/show flags
+    # Short-circuit help/show flags
     for special in ('--help-detailed', '--examples', '--troubleshooting', '--version'):
         if special in args:
             if special == '--help-detailed':
@@ -166,7 +169,6 @@ def _convert_legacy_args(args: Optional[list[str]]) -> tuple[Optional[int], list
                 show_help('version')
             return 0, []
 
-    # Phase 2: mapping pass (delegated)
     def _map_legacy_args(args_list: list[str]) -> list[str]:
         mapping = {
             '--check-platform': ['check-platform'],
@@ -200,43 +202,6 @@ def _convert_legacy_args(args: Optional[list[str]]) -> tuple[Optional[int], list
         legacy_args.insert(0, 'convert')
 
     return None, legacy_args
-
-
-# Backward compatibility functions
-def run_legacy_cli(args: Optional[list[str]] = None) -> int:
-    """Run legacy CLI for backward compatibility"""
-    exit_code, legacy_args = _convert_legacy_args(args)
-    if exit_code is not None:
-        return exit_code
-
-    cli = UnifiedCLI()
-    return cli.run(legacy_args)
-
-
-# Compatibility aliases for old CLI files
-def run_jar2appimage_cli() -> int:
-    """Run as jar2appimage_cli.py"""
-    return run_legacy_cli()
-
-
-def run_enhanced_jar2appimage_cli() -> int:
-    """Run as enhanced_jar2appimage_cli.py"""
-    return run_legacy_cli()
-
-
-def run_enhanced_cli() -> int:
-    """Run as enhanced_cli.py"""
-    return run_legacy_cli()
-
-
-def run_cli_helper() -> int:
-    """Run as cli_helper.py"""
-    if len(sys.argv) > 1:
-        show_help(sys.argv[1], *sys.argv[2:])
-    else:
-        show_help('basic')
-    return 0
-
 
 
 

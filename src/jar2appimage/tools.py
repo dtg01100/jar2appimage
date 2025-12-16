@@ -21,7 +21,8 @@ class ToolManager:
         Initialize tool manager
 
         Args:
-            cache_dir: Directory to cache downloaded tools (default: ~/.cache/jar2appimage)
+            cache_dir: Directory to cache downloaded tools (default:
+                ~/.cache/jar2appimage)
         """
         if cache_dir:
             self.cache_dir = Path(cache_dir)
@@ -85,7 +86,8 @@ class ToolManager:
 
             # Make executable
             st = os.stat(cached_tool)
-            os.chmod(cached_tool, st.st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+            perms = st.st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH
+            os.chmod(cached_tool, perms)
 
             print(f"✅ Downloaded appimagetool to {cached_tool}")
             return str(cached_tool)
@@ -106,7 +108,7 @@ class ToolManager:
         import shutil
         return shutil.which(tool_name)
 
-    def clear_cache(self):
+    def clear_cache(self) -> None:
         """Clear the tool cache directory"""
         import shutil
         if self.cache_dir.exists():

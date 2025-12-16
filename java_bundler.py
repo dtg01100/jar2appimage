@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Simple Java bundler for jar2appimage - Final Fixed Version"""
 
+import logging
 import os
 import shutil
 import subprocess
@@ -8,6 +9,10 @@ import sys
 import tarfile
 import tempfile
 from pathlib import Path
+from typing import Optional
+
+# Configure module-level logger
+logger = logging.getLogger(__name__)
 
 
 class JavaBundler:
@@ -15,9 +20,9 @@ class JavaBundler:
 
     def __init__(self, jdk_version: str = "11"):
         self.jdk_version = jdk_version
-        self.bundled_jdk_path = None
+        self.bundled_jdk_path: Optional[str] = None
 
-    def download_opensdk(self, output_dir: str = ".") -> str:
+    def download_opensdk(self, output_dir: str = ".") -> Optional[str]:
         """Download OpenJDK for bundling"""
         jdk_arch = "x64_linux"
         self.jdk_version.replace("+", "_")
@@ -29,12 +34,14 @@ class JavaBundler:
 
         jdk_url = jdk_urls.get(self.jdk_version, jdk_urls.get("11"))
         if not jdk_url:
+            logger.error(f"Unsupported OpenJDK version: {self.jdk_version}")
             raise ValueError(f"Unsupported OpenJDK version: {self.jdk_version}")
 
         jdk_filename = f"openjdk-{self.jdk_version}-{jdk_arch}.tar.gz"
         jdk_path = os.path.join(output_dir, jdk_filename)
 
         print(f"🔍 Downloading OpenJDK {self.jdk_version} ({jdk_arch})...")
+        logger.info(f"Downloading OpenJDK {self.jdk_version} ({jdk_arch}) from {jdk_url}")
 
         try:
             subprocess.run(
@@ -46,34 +53,40 @@ class JavaBundler:
 
             if os.path.exists(jdk_path):
                 file_size = os.path.getsize(jdk_path)
+                logger.info(f"OpenJDK {self.jdk_version} downloaded successfully: {jdk_filename} ({file_size // 1024 // 1024} MB)")
                 print(
                     f"✅ OpenJDK {self.jdk_version} downloaded: {jdk_filename} ({file_size // 1024 // 1024} MB)"
                 )
                 return jdk_path
             else:
+                logger.error(f"Download failed for {jdk_filename}")
                 print(f"❌ Download failed for {jdk_filename}")
                 return None
 
         except Exception as e:
+            logger.error(f"Download error: {e}")
             print(f"❌ Download error: {e}")
             return None
 
-    def extract_opensdk(self, jdk_path: str) -> str:
+    def extract_opensdk(self, jdk_path: str) -> Optional[str]:
         """Extract OpenJDK for bundling"""
         extract_dir = jdk_path.replace(".tar.gz", "")
 
         print(f"📦 Extracting OpenJDK from {jdk_path}...")
+        logger.info(f"Extracting OpenJDK from {jdk_path}")
 
         try:
             with tarfile.open(jdk_path, "r:gz") as tar:
                 tar.extractall(path=extract_dir)
 
             extracted_jdk_path = os.path.join(extract_dir, f"jdk-{self.jdk_version}")
+            logger.info(f"OpenJDK extracted to: {extracted_jdk_path}")
             print(f"✅ OpenJDK extracted to: {extracted_jdk_path}")
             self.bundled_jdk_path = extracted_jdk_path  # Store the extracted path
             return extracted_jdk_path
 
         except Exception as e:
+            logger.error(f"Extraction failed: {e}")
             print(f"❌ Extraction failed: {e}")
             return None
 
@@ -90,6 +103,7 @@ class JavaBundler:
         app_name_clean = app_name.replace(" ", "-").lower()
 
         print(f"📦 Bundling {app_name_clean} with OpenJDK {self.jdk_version}...")
+        logger.info(f"Bundling {app_name_clean} with OpenJDK {self.jdk_version}")
 
         # Create temporary directory for bundling
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -123,6 +137,7 @@ class JavaBundler:
                         tar.add(file, arcname=os.path.relpath(file, bundle_dir))
 
             bundle_size = os.path.getsize(bundle_path)
+            logger.info(f"Created bundled application: {bundle_filename} ({bundle_size // 1024 // 1024} MB)")
             print(
                 f"✅ Created bundled application: {bundle_filename} ({bundle_size // 1024 // 1024} MB)"
             )
@@ -143,12 +158,15 @@ export PATH="{jdk_path}/bin:$PATH"
 exec "$JAVA_HOME/bin/java" -jar "$(dirname "$0")/{app_name_clean}.jar" "$@"
 """
 
-    def get_bundled_jdk_path(self) -> str:
+    def get_bundled_jdk_path(self) -> Optional[str]:
         """Get path to bundled JDK"""
         return self.bundled_jdk_path
 
 
 def main():
+    # Setup logging for CLI mode
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+    
     if len(sys.argv) < 4:
         print("Usage: python3 java_bundler.py <jar_file> <app_name> [output_dir]")
         sys.exit(1)
@@ -164,13 +182,21 @@ def main():
         sys.exit(1)
 
     print(f"🔍 Bundling {app_name_clean} with OpenJDK 11...")
+    logger.info(f"Starting Java bundling process for {app_name_clean}")
 
     # Download OpenJDK
     bundler = JavaBundler()
     bundled_app_path = bundler.download_opensdk(output_dir)
+    
+    if not bundled_app_path:
+        print("❌ Failed to download OpenJDK")
+        sys.exit(1)
 
     # Extract OpenJDK
-    bundler.extract_opensdk(bundled_app_path)
+    extracted_path = bundler.extract_opensdk(bundled_app_path)
+    if not extracted_path:
+        print("❌ Failed to extract OpenJDK")
+        sys.exit(1)
 
     # Bundle application
     bundle_path = bundler.bundle_application(jar_file, app_name, output_dir)

@@ -5,12 +5,16 @@ Analyzes JAR files and detects external dependencies automatically
 """
 
 import json
+import logging
 import re
 import sys
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
+
+# Configure module-level logger
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -50,6 +54,7 @@ class DependencyDetector:
 
     def analyze_jar_dependencies(self, jar_path: str) -> Dict[str, any]:
         """Comprehensive dependency analysis for a JAR file"""
+        logger.info(f"Starting dependency analysis for: {jar_path}")
         print(f"🔍 Analyzing dependencies in: {Path(jar_path).name}")
 
         jar_path = Path(jar_path)
@@ -65,12 +70,12 @@ class DependencyDetector:
         # Generate summary
         analysis_result["summary"] = self._generate_dependency_summary(analysis_result)
 
-        print(
-            f"  📦 Found {len(analysis_result['maven_dependencies'])} Maven dependencies"
-        )
-        print(
-            f"  📚 Found {len(analysis_result['library_dependencies'])} library dependencies"
-        )
+        maven_count = len(analysis_result['maven_dependencies'])
+        library_count = len(analysis_result['library_dependencies'])
+        
+        logger.info(f"Analysis complete - Found {maven_count} Maven dependencies, {library_count} library dependencies")
+        print(f"  📦 Found {maven_count} Maven dependencies")
+        print(f"  📚 Found {library_count} library dependencies")
 
         return analysis_result
 
@@ -96,6 +101,7 @@ class DependencyDetector:
                         classpath_entries = manifest_info["class-path"].split()
                         manifest_info["classpath_entries"] = classpath_entries
         except Exception as e:
+            logger.warning(f"Error reading manifest from {jar_path}: {e}")
             print(f"    ⚠️  Error reading manifest: {e}")
 
         return manifest_info
@@ -119,6 +125,7 @@ class DependencyDetector:
                         except Exception:
                             continue
         except Exception as e:
+            logger.warning(f"Error analyzing class dependencies in {jar_path}: {e}")
             print(f"    ⚠️  Error analyzing class dependencies: {e}")
 
         return list(class_dependencies)
@@ -179,6 +186,7 @@ class DependencyDetector:
                             continue
 
         except Exception as e:
+            logger.warning(f"Error detecting Maven dependencies in {jar_path}: {e}")
             print(f"    ⚠️  Error detecting Maven dependencies: {e}")
 
         # Also detect from jar filename patterns
@@ -268,6 +276,7 @@ class DependencyDetector:
                         library_jars.append(file_info.filename)
 
         except Exception as e:
+            logger.warning(f"Error detecting library JARs in {jar_path}: {e}")
             print(f"    ⚠️  Error detecting library JARs: {e}")
 
         return library_jars
@@ -448,11 +457,18 @@ def generate_dependency_report(jar_path: str) -> str:
 
 
 if __name__ == "__main__":
+    # Setup logging for CLI mode
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+    
     if len(sys.argv) != 2:
         print("Usage: python dependency_detector.py <jar_file>")
         sys.exit(1)
 
     jar_file = sys.argv[1]
+    logger.info(f"Starting dependency detection for: {jar_file}")
+    
     detector = DependencyDetector()
     report = detector.generate_dependency_report(jar_file)
     print(report)
+    
+    logger.info("Dependency detection completed successfully")

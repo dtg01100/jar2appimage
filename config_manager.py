@@ -6,10 +6,14 @@ Supports YAML, JSON, and TOML configuration files for build settings and metadat
 
 import argparse
 import json
+import logging
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, cast
+
+# Configure module-level logger
+logger = logging.getLogger(__name__)
 
 try:
     import yaml
@@ -69,7 +73,7 @@ class AppImageConfig:
     website: Optional[str] = None
     keywords: Optional[List[str]] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # Initialize lists that should not be None
         if self.classpath is None:
             self.classpath = []
@@ -102,9 +106,9 @@ class ConfigManager:
         ".jar2appimage.toml",
     ]
 
-    def __init__(self):
-        self.current_config = AppImageConfig()
-        self.config_file_path = None
+    def __init__(self) -> None:
+        self.current_config: AppImageConfig = AppImageConfig()
+        self.config_file_path: Optional[Path] = None
 
     def load_config(self, config_path: Union[str, Path]) -> AppImageConfig:
         """Load configuration from file"""
@@ -114,10 +118,11 @@ class ConfigManager:
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
         self.config_file_path = config_path
+        logger.info(f"Loading configuration from: {config_path}")
 
         # Determine file format
         if config_path.suffix.lower() == ".json":
-            config_data = self._load_json(config_path)
+            config_data: Dict[str, Any] = self._load_json(config_path)
         elif config_path.suffix.lower() in [".yaml", ".yml"]:
             if not HAS_YAML:
                 raise ImportError(
@@ -135,6 +140,7 @@ class ConfigManager:
 
         # Create config object
         self.current_config = self._dict_to_config(config_data)
+        logger.info(f"Configuration loaded successfully: {self.current_config.name or 'unnamed'}")
         return self.current_config
 
     def auto_discover_config(
@@ -142,22 +148,26 @@ class ConfigManager:
     ) -> Optional[AppImageConfig]:
         """Auto-discover and load configuration file"""
         working_dir = Path(working_dir)
+        logger.debug(f"Auto-discovering config in: {working_dir}")
 
         # Search for config files in order of preference
         for config_name in self.DEFAULT_CONFIG_NAMES:
             config_path = working_dir / config_name
             if config_path.exists():
                 try:
+                    logger.info(f"Found configuration file: {config_path}")
                     return self.load_config(config_path)
                 except Exception as e:
                     print(f"⚠️  Found config file {config_path} but failed to load: {e}")
+                    logger.warning(f"Failed to load config file {config_path}: {e}")
                     continue
 
+        logger.debug("No configuration file found during auto-discovery")
         return None
 
     def save_config(
         self, config_path: Union[str, Path], config: Optional[AppImageConfig] = None
-    ):
+    ) -> None:
         """Save configuration to file"""
         config_path = Path(config_path)
         config = config or self.current_config
@@ -179,47 +189,46 @@ class ConfigManager:
             raise ValueError(f"Unsupported configuration format: {config_path.suffix}")
 
         print(f"✅ Configuration saved to: {config_path}")
+        logger.info(f"Configuration saved to: {config_path}")
 
     def merge_cli_args(self, cli_args: argparse.Namespace) -> AppImageConfig:
         """Merge CLI arguments with configuration"""
-        if not self.current_config:
-            return self.current_config
-
         # Override config with CLI args (non-None values)
         for key, value in vars(cli_args).items():
             if value is not None and hasattr(self.current_config, key):
                 setattr(self.current_config, key, value)
+                logger.debug(f"CLI arg override: {key} = {value}")
 
         return self.current_config
 
     def _load_json(self, config_path: Path) -> Dict[str, Any]:
         """Load JSON configuration"""
         with open(config_path, encoding="utf-8") as f:
-            return json.load(f)
+            return cast(Dict[str, Any], json.load(f))
 
     def _load_yaml(self, config_path: Path) -> Dict[str, Any]:
         """Load YAML configuration"""
         with open(config_path, encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
+            return cast(Dict[str, Any], yaml.safe_load(f) or {})
 
     def _load_toml(self, config_path: Path) -> Dict[str, Any]:
         """Load TOML configuration"""
         with open(config_path, encoding="utf-8") as f:
-            return toml.load(f)
+            return cast(Dict[str, Any], toml.load(f))
 
-    def _save_json(self, config_path: Path, data: Dict[str, Any]):
+    def _save_json(self, config_path: Path, data: Dict[str, Any]) -> None:
         """Save JSON configuration"""
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
-    def _save_yaml(self, config_path: Path, data: Dict[str, Any]):
+    def _save_yaml(self, config_path: Path, data: Dict[str, Any]) -> None:
         """Save YAML configuration"""
         if not HAS_YAML:
             raise ImportError("PyYAML is required")
         with open(config_path, "w", encoding="utf-8") as f:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True, indent=2)
 
-    def _save_toml(self, config_path: Path, data: Dict[str, Any]):
+    def _save_toml(self, config_path: Path, data: Dict[str, Any]) -> None:
         """Save TOML configuration"""
         if not HAS_TOML:
             raise ImportError("toml is required")
@@ -285,6 +294,7 @@ class ConfigManager:
         """Validate configuration and return list of issues"""
         config = config or self.current_config
         issues = []
+        logger.debug("Validating configuration")
 
         # Check required fields
         if not config.jar_path:
@@ -334,6 +344,11 @@ class ConfigManager:
             if not Path(lib).exists():
                 issues.append(f"Library not found: {lib}")
 
+        if issues:
+            logger.warning(f"Configuration validation failed with {len(issues)} issues")
+        else:
+            logger.debug("Configuration validation passed")
+
         return issues
 
 
@@ -355,7 +370,7 @@ class ConfigTemplate:
 
     @staticmethod
     def gui_app(
-        name: str, jar_path: str, main_class: str, icon: str = None
+        name: str, jar_path: str, main_class: str, icon: Optional[str] = None
     ) -> AppImageConfig:
         """Template for GUI applications"""
         return AppImageConfig(
@@ -427,6 +442,9 @@ def create_sample_config_file(output_path: str, format: str = "yaml") -> str:
 
 if __name__ == "__main__":
     import argparse
+
+    # Setup logging for CLI mode
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
     parser = argparse.ArgumentParser(
         description="jar2appimage configuration management"

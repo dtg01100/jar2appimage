@@ -5,13 +5,17 @@ Automatically downloads the latest LTS Java version when no specific version is 
 """
 
 import json
+import logging
 import shutil
 import subprocess
 import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
+
+# Configure module-level logger
+logger = logging.getLogger(__name__)
 
 
 class JavaAutoDownloader:
@@ -20,9 +24,9 @@ class JavaAutoDownloader:
     # LTS Java versions (as of 2025)
     LTS_VERSIONS = ["8", "11", "17", "21"]
 
-    def __init__(self):
-        self.cache = {}  # Cache for API responses
-        self.download_cache_dir = Path.home() / ".jar2appimage" / "java_downloads"
+    def __init__(self) -> None:
+        self.cache: Dict[str, Any] = {}  # Cache for API responses
+        self.download_cache_dir: Path = Path.home() / ".jar2appimage" / "java_downloads"
         self.download_cache_dir.mkdir(parents=True, exist_ok=True)
 
     def get_latest_lts_version(self) -> str:
@@ -31,19 +35,23 @@ class JavaAutoDownloader:
         Returns the most recent LTS version number
         """
         print("🔍 Checking for latest LTS Java version...")
+        logger.info("Checking for latest LTS Java version")
 
         # Try to get the latest LTS from Adoptium API
         try:
             latest_version = self._get_latest_lts_from_api()
             if latest_version:
                 print(f"✅ Found latest LTS version: {latest_version}")
+                logger.info(f"Found latest LTS version: {latest_version}")
                 return latest_version
         except Exception as e:
             print(f"⚠️  API lookup failed: {e}")
+            logger.warning(f"API lookup failed: {e}")
 
         # Fallback to hardcoded latest LTS (21 as of 2025-12-16)
         fallback_version = "21"
         print(f"📋 Using fallback LTS version: {fallback_version}")
+        logger.info(f"Using fallback LTS version: {fallback_version}")
         return fallback_version
 
     def _get_latest_lts_from_api(self) -> Optional[str]:
@@ -81,7 +89,8 @@ class JavaAutoDownloader:
 
             return None
 
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Failed to get latest LTS from API: {e}")
             pass
 
         return None
@@ -108,6 +117,7 @@ class JavaAutoDownloader:
         cached_file = self._get_cached_download(java_version)
         if cached_file and cached_file.exists():
             print(f"📦 Found cached Java {java_version}: {cached_file}")
+            logger.info(f"Found cached Java {java_version}: {cached_file}")
             return str(cached_file)
 
         # Download using existing smart bundler
@@ -123,9 +133,11 @@ class JavaAutoDownloader:
 
         except ImportError:
             print("⚠️  SmartJavaBundler not available, using fallback method")
+            logger.warning("SmartJavaBundler not available, using fallback method")
             return self._fallback_download(java_version, output_dir)
         except Exception as e:
             print(f"❌ Download failed: {e}")
+            logger.error(f"Download failed: {e}")
             return self._fallback_download(java_version, output_dir)
 
         return None
@@ -142,6 +154,7 @@ class JavaAutoDownloader:
         download_url = fallbacks.get(java_version)
         if not download_url:
             print(f"❌ No fallback URL available for Java {java_version}")
+            logger.error(f"No fallback URL available for Java {java_version}")
             return None
 
         output_dir_path = Path(output_dir)
@@ -152,6 +165,7 @@ class JavaAutoDownloader:
 
         print(f"📥 Downloading Java {java_version} from fallback URL...")
         print(f"   URL: {download_url}")
+        logger.info(f"Downloading Java {java_version} from fallback URL: {download_url}")
 
         try:
             subprocess.run(
@@ -164,13 +178,16 @@ class JavaAutoDownloader:
             if java_path.exists():
                 size_mb = java_path.stat().st_size // (1024 * 1024)
                 print(f"✅ Java {java_version} downloaded: {filename} ({size_mb} MB)")
+                logger.info(f"Java {java_version} downloaded successfully: {filename} ({size_mb} MB)")
                 return str(java_path)
             else:
                 print("❌ Download completed but file not found")
+                logger.error("Download completed but file not found")
                 return None
 
         except subprocess.CalledProcessError as e:
             print(f"❌ Download failed: {e}")
+            logger.error(f"Download failed: {e}")
             return None
 
     def _get_cached_download(self, java_version: str) -> Optional[Path]:
@@ -178,10 +195,11 @@ class JavaAutoDownloader:
         cache_pattern = f"*{java_version}*.tar.gz"
         for cached_file in self.download_cache_dir.glob(cache_pattern):
             if cached_file.exists() and cached_file.stat().st_size > 100 * 1024 * 1024:  # At least 100MB
+                logger.debug(f"Found cached download for Java {java_version}: {cached_file}")
                 return cached_file
         return None
 
-    def _cache_download(self, downloaded_file: str, java_version: str):
+    def _cache_download(self, downloaded_file: str, java_version: str) -> None:
         """Cache the downloaded file"""
         try:
             source_path = Path(downloaded_file)
@@ -194,8 +212,10 @@ class JavaAutoDownloader:
                 if not cache_path.exists():
                     shutil.copy2(source_path, cache_path)
                     print(f"📦 Cached Java {java_version}: {cache_path}")
+                    logger.info(f"Cached Java {java_version}: {cache_path}")
         except Exception as e:
             print(f"⚠️  Failed to cache download: {e}")
+            logger.warning(f"Failed to cache download: {e}")
 
     def get_java_info(self, java_version: Optional[str] = None) -> Dict:
         """Get information about a Java version"""
@@ -237,6 +257,9 @@ def get_auto_java_version() -> str:
 
 if __name__ == "__main__":
     import argparse
+
+    # Setup logging for CLI mode
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
     parser = argparse.ArgumentParser(description="Automatic Java Downloader for jar2appimage")
     parser.add_argument(

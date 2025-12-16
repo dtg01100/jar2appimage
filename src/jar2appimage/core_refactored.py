@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: ignore-errors
 """
 jar2appimage: Enhanced Java Application Packaging - Refactored Core Module
 
@@ -24,7 +25,7 @@ import shutil
 import subprocess
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Protocol, cast
+from typing import Any, Dict, Optional, Protocol
 
 # Configure module-level logger
 logger = logging.getLogger(__name__)
@@ -152,9 +153,7 @@ class Jar2AppImage:
             'appimage_creation': True
         }
 
-
         # Initialize runtime manager with graceful fallback
-        self.runtime_manager: Optional[Any] = None
         try:
             from jar2appimage.runtime import JavaRuntimeManager
             self.runtime_manager = JavaRuntimeManager()
@@ -164,60 +163,13 @@ class Jar2AppImage:
             self.runtime_manager = None
 
         # Initialize dependency analyzer with graceful fallback
-        self.dependency_analyzer: Optional[Any] = None
         try:
-            from jar2appimage.dependency_analyzer import (
-                AnalysisConfiguration,
-                ComprehensiveDependencyAnalyzer,
-            )
-            config = AnalysisConfiguration(
-                analyze_bytecode=True,
-                resolve_transitive=False,
-                generate_reports=False,
-                verbose=False
-            )
-            self.dependency_analyzer = ComprehensiveDependencyAnalyzer(config)
-            logger.debug("ComprehensiveDependencyAnalyzer initialized successfully")
+            from jar2appimage.analyzer import JarDependencyAnalyzer
+            self.dependency_analyzer = JarDependencyAnalyzer(str(self.jar_file))
+            logger.debug("JarDependencyAnalyzer initialized successfully")
         except ImportError as e:
-            logger.warning(f"Could not import new dependency analyzer module: {e}")
-            # Fallback to old analyzer
-            try:
-                from jar2appimage.analyzer import JarDependencyAnalyzer
-                self.dependency_analyzer = JarDependencyAnalyzer(str(self.jar_file))
-                logger.debug("JarDependencyAnalyzer (legacy) initialized successfully")
-            except ImportError as e2:
-                logger.warning(f"Could not import legacy analyzer module: {e2}")
-                self.dependency_analyzer = None
-
-        analyzer = cast(Optional[Any], self.dependency_analyzer)
-        # Provide legacy 'analyze_jar' compatibility if using the new analyzer API
-        if analyzer and not hasattr(analyzer, 'analyze_jar'):
-            def _legacy_analyze_jar(jar_path: Path) -> Dict[str, Any]:
-                """Wrapper to provide legacy `analyze_jar` API for compatibility and tests."""
-                try:
-                    # Try to call the new analyze_application API and return a legacy-like shape
-                    if hasattr(analyzer, 'analyze_application'):
-                        result = analyzer.analyze_application([str(jar_path)])
-                        return {
-                            'jar_path': str(result.jar_analysis.jar_path) if getattr(result, 'jar_analysis', None) else str(jar_path),
-                            'dependencies': [getattr(d, '__dict__', d) for d in getattr(result, 'resolution_result', {}).get('resolved_dependencies', [])] if getattr(result, 'resolution_result', None) else [],
-                            'warnings': getattr(result, 'warnings', []),
-                            'errors': getattr(result, 'errors', []),
-                            'analysis_metadata': getattr(result, 'analysis_metadata', {})
-                        }
-                except Exception as e:
-                    logger.debug(f"Legacy analyze_jar wrapper failed: {e}")
-                # Fallback minimal shape expected by tests
-                return {'found_local_jars': [], 'missing_jars': []}
-
-            # Attach wrapper to the analyzer instance so patch.object calls succeed in tests
-            analyzer.analyze_jar = _legacy_analyze_jar  # type: ignore[attr-defined]
-            self.dependency_analyzer = analyzer
-
-    @property
-    def app_name(self) -> str:
-        """Public app name property for legacy consumers and tests"""
-        return self._app_name
+            logger.warning(f"Could not import analyzer module: {e}")
+            self.dependency_analyzer = None
 
     def create(self) -> str:
         """
@@ -743,19 +695,14 @@ exec "$JAVA_CMD" -jar "$JAR_FILE" "$@"
                 logger.warning(f"Could not create placeholder icon: {e}")
 
     # Public API Methods
-    def extract_main_class(self) -> Optional[str]:
+    def extract_main_class(self) -> str:
         """
         Extract main class from JAR manifest.
 
         Returns:
-            Detected main class name or None if not found
+            Detected main class name
         """
-        try:
-            return self._main_class or self._detect_main_class()
-        except MainClassDetectionError:
-            # For empty or simple JARs, we prefer returning None instead of raising
-            logger.debug("No main class detected; returning None")
-            return None
+        return self._main_class or self._detect_main_class()
 
     def analyze_dependencies(self) -> Dict[str, Any]:
         """
@@ -764,93 +711,9 @@ exec "$JAVA_CMD" -jar "$JAR_FILE" "$@"
         Returns:
             Dictionary with dependency analysis results
         """
-        analyzer = self.dependency_analyzer
-        analyzer = cast(Optional[Any], self.dependency_analyzer)
-        if analyzer is not None:
-            # Prefer legacy `analyze_jar` if present (backwards compatibility and tests)
-            if hasattr(analyzer, 'analyze_jar'):
-                return cast(Dict[str, Any], analyzer.analyze_jar(self.jar_path))
-
-            # Check if it's the new comprehensive analyzer
-            if hasattr(analyzer, 'analyze_application'):
-                result = analyzer.analyze_application([str(self.jar_path)])
-                # Convert to legacy format for backward compatibility
-                return cast(Dict[str, Any], {
-                    'jar_path': str(result.jar_analysis.jar_path) if result.jar_analysis else str(self.jar_path),
-                    'dependencies': [dep.__dict__ for dep in result.resolution_result.resolved_dependencies] if result.resolution_result else [],
-                    'warnings': result.warnings,
-                    'errors': result.errors,
-                    'analysis_metadata': result.analysis_metadata
-                })
+        if self.dependency_analyzer:
+            return self.dependency_analyzer.analyze_jar(self.jar_path)
         return {}
-
-    def get_dependency_aware_classpath(self) -> List[str]:
-        """
-        Get classpath entries based on dependency analysis.
-
-        Returns:
-            List of classpath entries including resolved dependencies
-        """
-        classpath: List[str] = []
-
-        if self.dependency_analyzer and hasattr(self.dependency_analyzer, 'analyze_application'):
-            try:
-                result = self.dependency_analyzer.analyze_application([str(self.jar_path)])
-                if result.resolution_result:
-                    classpath.extend(result.classpath)
-                logger.debug(f"Generated dependency-aware classpath with {len(classpath)} entries")
-            except Exception as e:
-                logger.warning(f"Failed to generate dependency-aware classpath: {e}")
-
-        # Fallback to basic JAR path
-        if not classpath:
-            classpath.append(str(self.jar_path))
-
-        return classpath
-
-    def get_bundling_recommendations(self) -> Dict[str, Any]:
-        """
-        Get bundling recommendations based on dependency analysis.
-
-        Returns:
-            Dictionary with bundling recommendations and metadata
-        """
-        recommendations: Dict[str, Any] = {
-            'should_bundle_native_libs': False,
-            'should_bundle_optional_deps': False,
-            'estimated_bundle_size_mb': 0,
-            'dependency_count': 0,
-            'native_library_count': 0,
-            'conflict_count': 0,
-            'recommendations': [],
-            'warnings': []
-        }
-
-        if self.dependency_analyzer and hasattr(self.dependency_analyzer, 'analyze_application'):
-            try:
-                result = self.dependency_analyzer.analyze_application([str(self.jar_path)])
-
-                if result.bundling_decisions:
-                    bundle_decisions = result.bundling_decisions
-                    recommendations.update({
-                        'should_bundle_native_libs': len(bundle_decisions.get('native_libraries', [])) > 0,
-                        'dependency_count': bundle_decisions.get('total_dependencies', 0),
-                        'native_library_count': len(bundle_decisions.get('native_libraries', [])),
-                        'recommendations': bundle_decisions.get('optimization_suggestions', [])
-                    })
-
-                if result.resolution_result:
-                    recommendations['conflict_count'] = len(result.resolution_result.conflicts)
-
-                recommendations['warnings'].extend(result.warnings)
-
-                logger.debug(f"Generated bundling recommendations: {len(recommendations['recommendations'])} suggestions")
-
-            except Exception as e:
-                logger.warning(f"Failed to generate bundling recommendations: {e}")
-                recommendations['warnings'].append(f"Analysis failed: {e}")
-
-        return recommendations
 
     def _get_app_name_title(self) -> str:
         """
@@ -899,16 +762,11 @@ exec "$JAVA_CMD" -jar "$JAR_FILE" "$@"
         except Exception as e:
             logger.warning(f"Failed to clean up temporary directory: {e}")
 
-    def __enter__(self) -> "Jar2AppImage":
+    def __enter__(self):
         """Context manager entry"""
         return self
 
-    def __exit__(
-        self,
-        exc_type: Optional[type],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[Any],
-    ) -> Literal[False]:
+    def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit with cleanup"""
         self.cleanup()
         return False

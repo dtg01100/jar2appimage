@@ -84,7 +84,12 @@ class TestToolManager:
             # Create a fake cached tool
             import platform
             machine = platform.machine()
-            arch_map = {"x86_64": "x86_64", "amd64": "x86_64", "aarch64": "aarch64", "arm64": "aarch64"}
+            arch_map = {
+                "x86_64": "x86_64",
+                "amd64": "x86_64",
+                "aarch64": "aarch64",
+                "arm64": "aarch64",
+            }
             arch = arch_map.get(machine, machine)
 
             cached_tool = Path(tmpdir) / f"appimagetool-{arch}"

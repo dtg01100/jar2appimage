@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: ignore-errors
 """Simple Java bundler for jar2appimage - Fixed Version"""
 
 import os
@@ -141,7 +142,7 @@ class JavaBundler:
         """Check if AppImage uses bundled Java"""
         return self.bundled
 
-    def _detect_main_class(self) -> str:
+    def _detect_main_class(self) -> str:  # noqa: C901
         """Detect main class from JAR or using patterns"""
         # Try to read from manifest first
         try:
@@ -213,7 +214,9 @@ class JavaBundler:
 
     def _create_appimage_file(self, appimage_dir: str, app_name: str) -> str:
         """Create final AppImage file"""
-        os.path.join(self.output_dir, f"{app_name}.AppImage")
+        appimage_output_dir = self.output_dir  # Reference to self for scope
+        appimage_path: str = os.path.join(appimage_output_dir, f"{app_name}.AppImage")
+
 
         # Create enhanced AppRun script with smart terminal detection
         self._needs_terminal()

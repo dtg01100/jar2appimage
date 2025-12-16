@@ -78,7 +78,7 @@ class PortableJavaManager:
 
         logger.info(f"Initialized PortableJavaManager for {self.current_platform['system']} {self.current_platform['arch']}")
 
-    def _detect_platform(self) -> Dict[str, str]:
+    def _detect_platform(self) -> Dict[str, Any]:
         """Detect current platform and architecture"""
         system = platform.system()
         machine = platform.machine()
@@ -93,7 +93,7 @@ class PortableJavaManager:
             "supports_appimage": system == "Linux"
         }
 
-    def detect_system_java(self) -> Optional[Dict[str, Union[str, int, bool]]]:
+    def detect_system_java(self) -> Optional[Dict[str, Any]]:
         """
         Comprehensive system Java detection
 
@@ -124,7 +124,7 @@ class PortableJavaManager:
             # Check compatibility
             is_compatible = self._check_java_compatibility(version_info)
 
-            java_info = {
+            java_info: Dict[str, Any] = {
                 "command": java_cmd,
                 "version": version_info["version"],
                 "major_version": version_info["major"],
@@ -295,13 +295,13 @@ class PortableJavaManager:
         except Exception:
             return "Unknown"
 
-    def _check_java_compatibility(self, version_info: Dict) -> bool:
+    def _check_java_compatibility(self, version_info: Dict[str, Any]) -> bool:
         """
         Check if Java version is compatible with jar2appimage
 
         Basic compatibility check - can be enhanced based on specific requirements
         """
-        major_version = version_info["major"]
+        major_version = int(version_info["major"])
 
         # Minimum Java version for jar2appimage
         MIN_JAVA_VERSION = 8
@@ -323,7 +323,7 @@ class PortableJavaManager:
         """
         logger.info(f"📋 Analyzing JAR requirements: {jar_path}")
 
-        requirements = {
+        requirements: Dict[str, Any] = {
             "min_java_version": None,
             "requires_modules": False,
             "main_class": None,
@@ -553,7 +553,7 @@ class PortableJavaManager:
             "architecture": self.current_platform["arch"]
         }
 
-    def _show_detailed_download_info(self, java_version: str, download_info: Dict):
+    def _show_detailed_download_info(self, java_version: str, download_info: Dict[str, Any]) -> None:
         """Show detailed download information"""
         print(f"\n📋 Detailed Information for Java {java_version}:")
         print(f"   • Package Type: {download_info['package_type']} (Java Runtime Environment)")
@@ -621,7 +621,7 @@ class PortableJavaManager:
                 return cached_file
         return None
 
-    def _cache_download(self, downloaded_file: str, java_version: str):
+    def _cache_download(self, downloaded_file: str, java_version: str) -> None:
         """Cache the downloaded file"""
         try:
             source_path = Path(downloaded_file)
@@ -801,7 +801,7 @@ class PortableJavaManager:
         Returns:
             Dict with cache information
         """
-        cache_info = {
+        cache_info: Dict[str, Any] = {
             "cache_dir": str(self.download_cache),
             "total_files": 0,
             "total_size_mb": 0,

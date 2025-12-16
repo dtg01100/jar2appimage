@@ -4,37 +4,43 @@ AppImage Validation Module
 Provides comprehensive validation and testing of created AppImages
 """
 
+import logging
 import os
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict
+from typing import Any, Dict, Optional
+
+# Configure module-level logger
+logger = logging.getLogger(__name__)
 
 
 class AppImageValidator:
     """Comprehensive AppImage validation and testing"""
 
     def __init__(self, appimage_path: str, timeout: int = 30):
-        self.appimage_path = Path(appimage_path)
-        self.timeout = timeout
-        self.temp_dir = None
-        self.results = {
+        self.appimage_path: Path = Path(appimage_path)
+        self.timeout: int = timeout
+        self.temp_dir: Optional[str] = None
+        self.results: Dict[str, Any] = {
             "file_validation": {},
             "runtime_validation": {},
             "integration_tests": {},
             "overall_status": "unknown",
         }
 
-    def validate_file(self) -> Dict[str, bool]:
+    def validate_file(self) -> Dict[str, Any]:
         """Validate AppImage file properties"""
+        logger.info(f"Starting file validation for: {self.appimage_path}")
         print("🔍 Validating AppImage file properties...")
 
-        results = {}
+        results: Dict[str, Any] = {}
 
         # Check if file exists
         results["exists"] = self.appimage_path.exists()
         if not results["exists"]:
+            logger.error(f"AppImage not found: {self.appimage_path}")
             print(f"❌ AppImage not found: {self.appimage_path}")
             return results
 
@@ -43,12 +49,14 @@ class AppImageValidator:
             size = self.appimage_path.stat().st_size
             results["has_size"] = size > 0
             results["size_mb"] = round(size / (1024 * 1024), 2)
+            logger.info(f"AppImage size: {results['size_mb']} MB")
             print(f"📦 AppImage size: {results['size_mb']} MB")
 
         # Check if executable
         if results["exists"]:
             results["is_executable"] = os.access(self.appimage_path, os.X_OK)
             if not results["is_executable"]:
+                logger.warning("AppImage is not executable, fixing permissions...")
                 print("⚠️  AppImage is not executable, fixing permissions...")
                 self.appimage_path.chmod(0o755)
                 results["is_executable"] = os.access(self.appimage_path, os.X_OK)
@@ -65,6 +73,7 @@ class AppImageValidator:
             except Exception as e:
                 results["is_elf"] = False
                 results["is_appimage"] = False
+                logger.error(f"Error reading file header: {e}")
                 print(f"❌ Error reading file header: {e}")
 
         # Check for AppImage signature
@@ -87,14 +96,14 @@ class AppImageValidator:
 
         return results
 
-    def extract_and_validate_structure(self) -> Dict[str, bool]:
+    def extract_and_validate_structure(self) -> Dict[str, Any]:
         """Extract AppImage and validate internal structure"""
         print("🔧 Extracting and validating AppImage structure...")
 
         # Create temporary directory
         self.temp_dir = tempfile.mkdtemp(prefix="appimage_validation_")
 
-        results = {}
+        results: Dict[str, Any] = {}
 
         try:
             # Make AppImage executable if not already
@@ -155,16 +164,17 @@ class AppImageValidator:
                     )
 
         except Exception as e:
+            logger.error(f"Structure validation error: {e}")
             print(f"❌ Structure validation error: {e}")
             results["extraction_error"] = str(e)
 
         return results
 
-    def test_runtime_execution(self) -> Dict[str, bool]:
+    def test_runtime_execution(self) -> Dict[str, Any]:
         """Test AppImage runtime execution"""
         print("🚀 Testing AppImage runtime execution...")
 
-        results = {}
+        results: Dict[str, Any] = {}
 
         try:
             # Test --help flag (should work for most Java apps)
@@ -228,11 +238,11 @@ class AppImageValidator:
 
         return results
 
-    def validate_desktop_integration(self) -> Dict[str, bool]:
+    def validate_desktop_integration(self) -> Dict[str, Any]:
         """Validate desktop integration files"""
         print("📋 Validating desktop integration...")
 
-        results = {}
+        results: Dict[str, Any] = {}
 
         if not self.temp_dir:
             results["skipped"] = True
@@ -277,6 +287,7 @@ class AppImageValidator:
 
         except Exception as e:
             results["desktop_validation_error"] = str(e)
+            logger.error(f"Desktop validation error: {e}")
             print(f"  ❌ Desktop validation error: {e}")
 
         return results
@@ -390,7 +401,7 @@ class AppImageValidator:
 
         return report_content
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """Clean up temporary files"""
         if self.temp_dir and os.path.exists(self.temp_dir):
             import shutil
@@ -405,16 +416,28 @@ def validate_appimage(appimage_path: str, timeout: int = 30) -> bool:
         report = validator.generate_validation_report()
         print("\n" + "=" * 60)
         print(report)
-        return validator.results["overall_status"] == "passed"
+        status = validator.results.get("overall_status") == "passed"
+        return bool(status)
     finally:
         validator.cleanup()
 
 
 if __name__ == "__main__":
+    # Setup logging for CLI mode
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+    
     if len(sys.argv) != 2:
         print("Usage: python appimage_validator.py <path_to_appimage>")
         sys.exit(1)
 
     appimage_path = sys.argv[1]
+    logger.info(f"Starting AppImage validation for: {appimage_path}")
+    
     success = validate_appimage(appimage_path)
+    
+    if success:
+        logger.info("AppImage validation passed successfully")
+    else:
+        logger.warning("AppImage validation failed")
+        
     sys.exit(0 if success else 1)

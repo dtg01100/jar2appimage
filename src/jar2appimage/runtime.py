@@ -4,12 +4,13 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Optional, Tuple
 
 
 class JavaRuntimeManager:
     """Manages Java runtime environments"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         import os
         import uuid
         build_root = Path(os.getcwd()) / "jar2appimage_build"
@@ -18,19 +19,19 @@ class JavaRuntimeManager:
         self.temp_dir.mkdir(exist_ok=True)
         print(f"[DEBUG] Created JavaRuntimeManager temp_dir: {self.temp_dir}")
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """Clean up temporary directory"""
         if self.temp_dir.exists():
             shutil.rmtree(self.temp_dir)
 
-    def get_system_java(self):
+    def get_system_java(self) -> Optional[Path]:
         """Get system Java path if available"""
         java_cmd = shutil.which("java")
         if java_cmd:
             return Path(java_cmd)
         return None
 
-    def get_runtime(self, version: str = "11"):
+    def get_runtime(self, version: str = "11") -> Optional[str]:
         """Get Java runtime for specified version"""
         # First try to find system Java
         java_cmd = shutil.which("java")
@@ -41,7 +42,7 @@ class JavaRuntimeManager:
         print("❌ Java runtime not found in PATH")
         return None
 
-    def check_java_availability(self, java_cmd):
+    def check_java_availability(self, java_cmd: Optional[str]) -> Tuple[bool, str]:
         """Check if Java is available and working"""
         if not java_cmd:
             java_cmd = shutil.which("java")
@@ -49,7 +50,7 @@ class JavaRuntimeManager:
         if not java_cmd:
             return (
                 False,
-                "❌ Java not found. Please install Java JRE or JDK (version 11 or later).",
+                "Java not found. Install Java JRE/JDK (version 11+).",
             )
 
         try:
@@ -83,7 +84,7 @@ class JavaRuntimeManager:
         except Exception as e:
             return False, f"❌ Java check failed: {e}"
 
-    def get_runtime_with_fallback(self, version: str = "11"):
+    def get_runtime_with_fallback(self, version: str = "11") -> Optional[str]:
         """Get Java runtime with comprehensive error handling"""
         java_cmd = self.get_runtime(version)
 
@@ -123,7 +124,7 @@ class JavaRuntimeManager:
 
         return java_cmd
 
-    def get_system_java_version(self):
+    def get_system_java_version(self) -> str:
         """Get the version of system Java"""
         try:
             result = subprocess.run(
@@ -137,7 +138,7 @@ class JavaRuntimeManager:
         except Exception as e:
             return f"Java version unknown: {e}"
 
-    def get_java_version(self):
+    def get_java_version(self) -> str:
         """Get the version of system Java"""
         try:
             result = subprocess.run(

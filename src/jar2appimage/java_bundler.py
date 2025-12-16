@@ -1,11 +1,16 @@
 """Java Runtime Manager with Java bundling support"""
 
+import logging
 import os
 import shutil
 import subprocess
 import tarfile
 import tempfile
 from pathlib import Path
+from typing import Optional
+
+# Configure module-level logger
+logger = logging.getLogger(__name__)
 
 
 class JavaBundler:
@@ -13,14 +18,15 @@ class JavaBundler:
 
     def __init__(self, jdk_version: str = "11"):
         self.jdk_version = jdk_version
-        self.bundled_jdk_path = None
+        self.bundled_jdk_path: Optional[str] = None
 
-    def download_opensdk(self, output_dir: str = ".") -> str:
+    def download_opensdk(self, output_dir: str = ".") -> Optional[str]:
         """Download OpenJDK for bundling using Adoptium API"""
         import json
         import urllib.request
         jdk_major = str(self.jdk_version)
         if jdk_major not in ["8", "11", "17", "21"]:
+            logger.error(f"Unsupported OpenJDK version: {self.jdk_version}")
             print(f"❌ Unsupported OpenJDK version: {self.jdk_version}")
             return None
 
@@ -30,6 +36,7 @@ class JavaBundler:
             with urllib.request.urlopen(api_url) as resp:
                 data = json.load(resp)
         except Exception as e:
+            logger.error(f"Failed to query Adoptium API: {e}")
             print(f"❌ Failed to query Adoptium API: {e}")
             return None
 
@@ -49,6 +56,7 @@ class JavaBundler:
                 break
 
         if not jdk_url or not jdk_filename:
+            logger.error(f"Could not find a suitable OpenJDK binary for version {self.jdk_version}")
             print(f"❌ Could not find a suitable OpenJDK binary for version {self.jdk_version}")
             return None
 
@@ -63,16 +71,19 @@ class JavaBundler:
             )
             if os.path.exists(jdk_path):
                 file_size = os.path.getsize(jdk_path)
+                logger.info(f"OpenJDK downloaded: {jdk_filename} ({file_size // 1024 // 1024} MB)")
                 print(f"✅ OpenJDK downloaded: {jdk_filename} ({file_size // 1024 // 1024} MB)")
                 return jdk_path
             else:
+                logger.error(f"Download failed for {jdk_filename}")
                 print(f"❌ Download failed for {jdk_filename}")
                 return None
         except Exception as e:
+            logger.error(f"Download error: {e}")
             print(f"❌ Download error: {e}")
             return None
 
-    def extract_opensdk(self, jdk_path: str) -> str:
+    def extract_opensdk(self, jdk_path: str) -> Optional[str]:
         """Extract OpenJDK for bundling"""
         extract_dir = jdk_path.replace(".tar.gz", "")
 
@@ -85,10 +96,12 @@ class JavaBundler:
             extracted_jdk_path = os.path.join(
                 extract_dir, f"openjdk-{self.jdk_version}"
             )
+            logger.info(f"OpenJDK extracted to: {extracted_jdk_path}")
             print(f"✅ OpenJDK extracted to: {extracted_jdk_path}")
             self.bundled_jdk_path = extracted_jdk_path  # Store the extracted path
             return extracted_jdk_path
         except Exception as e:
+            logger.error(f"Extraction failed: {e}")
             print(f"❌ Extraction failed: {e}")
             return None
 
@@ -139,6 +152,7 @@ class JavaBundler:
                         tar.add(file, arcname=os.path.relpath(file, bundle_dir))
 
             bundle_size = os.path.getsize(bundle_path)
+            logger.info(f"Bundled application created: {bundle_filename} ({bundle_size // 1024 // 1024} MB)")
             print(
                 f"✅ Bundled application created: {bundle_filename} ({bundle_size // 1024 // 1024} MB)"
             )
@@ -159,7 +173,7 @@ export PATH="{jdk_path}/bin:$PATH"
 exec "$JAVA_HOME/bin/java" -jar "$(dirname "$0")/{app_name_clean}.jar" "$@"
 """
 
-    def get_bundled_jdk_path(self) -> str:
+    def get_bundled_jdk_path(self) -> Optional[str]:
         """Get path to bundled JDK"""
         return self.bundled_jdk_path
 
@@ -189,12 +203,15 @@ exec "$JAVA_HOME/bin/java" -jar "$(dirname "$0")/{app_name_clean}.jar" "$@"
             # Verify Java binary exists
             java_binary = appimage_java_dir / "bin" / "java"
             if java_binary.exists():
+                logger.info(f"Java bundled successfully: {java_binary}")
                 print(f"✅ Java bundled successfully: {java_binary}")
                 return True
             else:
+                logger.error(f"Java binary not found: {java_binary}")
                 print(f"❌ Java binary not found: {java_binary}")
                 return False
 
         except Exception as e:
+            logger.error(f"Failed to bundle Java: {e}")
             print(f"❌ Failed to bundle Java: {e}")
             return False
