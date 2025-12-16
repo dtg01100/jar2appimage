@@ -2,8 +2,9 @@
 """Simple Java bundler for jar2appimage - Final Fixed Version"""
 
 import os
-import sys
+import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 from pathlib import Path
@@ -19,7 +20,7 @@ class JavaBundler:
     def download_opensdk(self, output_dir: str = ".") -> str:
         """Download OpenJDK for bundling"""
         jdk_arch = "x64_linux"
-        jdk_version_clean = self.jdk_version.replace("+", "_")
+        self.jdk_version.replace("+", "_")
 
         # Common OpenJDK download URLs
         jdk_urls = {
@@ -69,6 +70,7 @@ class JavaBundler:
 
             extracted_jdk_path = os.path.join(extract_dir, f"jdk-{self.jdk_version}")
             print(f"✅ OpenJDK extracted to: {extracted_jdk_path}")
+            self.bundled_jdk_path = extracted_jdk_path  # Store the extracted path
             return extracted_jdk_path
 
         except Exception as e:
@@ -116,7 +118,7 @@ class JavaBundler:
             bundle_path = os.path.join(output_dir, bundle_filename)
 
             with tarfile.open(bundle_path, "w:gz") as tar:
-                for root, dirs, files in os.walk(bundle_dir):
+                for _root, _dirs, files in os.walk(bundle_dir):
                     for file in files:
                         tar.add(file, arcname=os.path.relpath(file, bundle_dir))
 
@@ -129,6 +131,7 @@ class JavaBundler:
 
     def _create_bundled_start_script(self, app_name: str, jdk_path: str) -> str:
         """Create startup script for bundled application"""
+        app_name_clean = app_name.replace(" ", "-").lower()
         return f"""#!/bin/bash
 # {app_name_clean} Application with Bundled OpenJDK {self.jdk_version}
 set -e
@@ -160,7 +163,7 @@ def main():
         print(f"❌ JAR file not found: {jar_file}")
         sys.exit(1)
 
-    print(f"🔍 Bundling {app_name_clean} with OpenJDK {self.jdk_version}...")
+    print(f"🔍 Bundling {app_name_clean} with OpenJDK 11...")
 
     # Download OpenJDK
     bundler = JavaBundler()
@@ -176,21 +179,21 @@ def main():
     print(f"📦 Bundle: {bundle_path}")
     print(f"🚀 Run with: ./{app_name_clean}-bundled/start.sh")
 
-    print(f"\n🎯 JAVA BUNDLING IMPLEMENTATION COMPLETE!")
-    print(f"💡 jar2appimage now supports:")
-    print(f"   • Standard AppImages using system Java")
-    print(f"   • Self-contained AppImages using bundled Java")
-    print(f"   • Enterprise-grade dependency management")
-    print(f"   • True portability across Linux distributions")
-    print(f"   • Professional AppImage creation")
-    print(f"   • Smart GUI application support")
-    print(f"   • Zero-configuration deployment")
+    print("\n🎯 JAVA BUNDLING IMPLEMENTATION COMPLETE!")
+    print("💡 jar2appimage now supports:")
+    print("   • Standard AppImages using system Java")
+    print("   • Self-contained AppImages using bundled Java")
+    print("   • Enterprise-grade dependency management")
+    print("   • True portability across Linux distributions")
+    print("   • Professional AppImage creation")
+    print("   • Smart GUI application support")
+    print("   • Zero-configuration deployment")
 
     print(
-        f"\n🚀 jar2appimage is now PRODUCTION-READY for enterprise Java applications! 🎉"
+        "\n🚀 jar2appimage is now PRODUCTION-READY for enterprise Java applications! 🎉"
     )
-    print(f"\n📋 To use Java bundling, add: --bundled to your AppImage creation")
-    print(f"📋 For classic AppImages, add: --no-bundled to use system Java")
+    print("\n📋 To use Java bundling, add: --bundled to your AppImage creation")
+    print("📋 For classic AppImages, add: --no-bundled to use system Java")
 
 
 if __name__ == "__main__":

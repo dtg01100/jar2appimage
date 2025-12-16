@@ -3,6 +3,7 @@
 import os
 import shutil
 import subprocess
+import tarfile
 import tempfile
 from pathlib import Path
 
@@ -15,26 +16,44 @@ class JavaBundler:
         self.bundled_jdk_path = None
 
     def download_opensdk(self, output_dir: str = ".") -> str:
-        """Download OpenJDK for bundling"""
-        jdk_arch = "x64_linux"
-        jdk_version_clean = self.jdk_version.replace("+", "_")
+        """Download OpenJDK for bundling using Adoptium API"""
+        import json
+        import urllib.request
+        jdk_major = str(self.jdk_version)
+        if jdk_major not in ["8", "11", "17", "21"]:
+            print(f"❌ Unsupported OpenJDK version: {self.jdk_version}")
+            return None
 
-        # Common OpenJDK download URLs
-        jdk_urls = {
-            "11": "https://github.com/adoptium/temurin11-jdk{jdk_version_clean}.tar.gz",
-            "17": "https://github.com/adoptium/temurin17-jdk{jdk_version_clean}.tar.gz",
-            "21": "https://github.com/adoptium/temurin21-jdk{jdk_version_clean}.tar.gz",
-        }
+        api_url = f"https://api.adoptium.net/v3/assets/feature_releases/{jdk_major}/ga?architecture=x64&image_type=jdk&os=linux"
+        print(f"🔍 Querying Adoptium API for OpenJDK {self.jdk_version}...")
+        try:
+            with urllib.request.urlopen(api_url) as resp:
+                data = json.load(resp)
+        except Exception as e:
+            print(f"❌ Failed to query Adoptium API: {e}")
+            return None
 
-        jdk_url = jdk_urls.get(self.jdk_version, jdk_urls.get("11"))
-        if not jdk_url:
-            raise ValueError(f"Unsupported OpenJDK version: {self.jdk_version}")
+        # Find the latest GA binary
+        jdk_url = None
+        jdk_filename = None
+        for release in data:
+            for binary in release.get("binaries", []):
+                pkg = binary.get("package", {})
+                link = pkg.get("link")
+                name = pkg.get("name")
+                if link and name and "hotspot" in name and name.endswith(".tar.gz"):
+                    jdk_url = link
+                    jdk_filename = name
+                    break
+            if jdk_url:
+                break
 
-        jdk_filename = f"openjdk-{self.jdk_version}-{jdk_arch}.tar.gz"
+        if not jdk_url or not jdk_filename:
+            print(f"❌ Could not find a suitable OpenJDK binary for version {self.jdk_version}")
+            return None
+
         jdk_path = os.path.join(output_dir, jdk_filename)
-
-        print(f"🔍 Downloading OpenJDK {self.jdk_version} ({jdk_arch})...")
-
+        print(f"🔍 Downloading OpenJDK from {jdk_url} ...")
         try:
             subprocess.run(
                 ["curl", "-L", "-f", "-#", "-o", jdk_path, jdk_url],
@@ -42,17 +61,13 @@ class JavaBundler:
                 capture_output=True,
                 text=True,
             )
-
             if os.path.exists(jdk_path):
                 file_size = os.path.getsize(jdk_path)
-                print(
-                    f"✅ OpenJDK {self.jdk_version} downloaded: {jdk_filename} ({file_size // 1024 // 1024} MB)"
-                )
+                print(f"✅ OpenJDK downloaded: {jdk_filename} ({file_size // 1024 // 1024} MB)")
                 return jdk_path
             else:
                 print(f"❌ Download failed for {jdk_filename}")
                 return None
-
         except Exception as e:
             print(f"❌ Download error: {e}")
             return None
@@ -71,6 +86,7 @@ class JavaBundler:
                 extract_dir, f"openjdk-{self.jdk_version}"
             )
             print(f"✅ OpenJDK extracted to: {extracted_jdk_path}")
+            self.bundled_jdk_path = extracted_jdk_path  # Store the extracted path
             return extracted_jdk_path
         except Exception as e:
             print(f"❌ Extraction failed: {e}")
@@ -118,7 +134,7 @@ class JavaBundler:
 
             with tarfile.open(bundle_path, "w:gz") as tar:
                 # Add all files to tarball
-                for root, dirs, files in os.walk(bundle_dir):
+                for _root, _dirs, files in os.walk(bundle_dir):
                     for file in files:
                         tar.add(file, arcname=os.path.relpath(file, bundle_dir))
 
@@ -128,3 +144,57 @@ class JavaBundler:
             )
 
             return bundle_path
+
+    def _create_bundled_start_script(self, app_name: str, jdk_path: str) -> str:
+        """Create startup script for bundled application"""
+        app_name_clean = app_name.replace(" ", "-").lower()
+        return f"""#!/bin/bash
+# {app_name_clean} Application with Bundled OpenJDK {self.jdk_version}
+set -e
+
+echo "Starting {app_name_clean} with bundled Java..."
+export JAVA_HOME="{jdk_path}"
+export PATH="{jdk_path}/bin:$PATH"
+
+exec "$JAVA_HOME/bin/java" -jar "$(dirname "$0")/{app_name_clean}.jar" "$@"
+"""
+
+    def get_bundled_jdk_path(self) -> str:
+        """Get path to bundled JDK"""
+        return self.bundled_jdk_path
+
+    def bundle_java_for_appimage(self, java_dir: str, appimage_dir: str) -> bool:
+        """Bundle Java into AppImage structure"""
+
+        java_dir_path = Path(java_dir)
+        appimage_java_dir = Path(appimage_dir) / "usr" / "java"
+
+        appimage_java_dir.mkdir(parents=True, exist_ok=True)
+
+        print(f"📋 Bundling Java into AppImage: {appimage_java_dir}")
+
+        try:
+            # Copy Java files
+            for item in java_dir_path.iterdir():
+                src = java_dir_path / item.name
+                dst = appimage_java_dir / item.name
+
+                if src.is_dir():
+                    if dst.exists():
+                        shutil.rmtree(dst)
+                    shutil.copytree(src, dst, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(src, dst)
+
+            # Verify Java binary exists
+            java_binary = appimage_java_dir / "bin" / "java"
+            if java_binary.exists():
+                print(f"✅ Java bundled successfully: {java_binary}")
+                return True
+            else:
+                print(f"❌ Java binary not found: {java_binary}")
+                return False
+
+        except Exception as e:
+            print(f"❌ Failed to bundle Java: {e}")
+            return False

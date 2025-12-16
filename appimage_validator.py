@@ -5,13 +5,11 @@ Provides comprehensive validation and testing of created AppImages
 """
 
 import os
-import sys
 import subprocess
-import time
-import json
+import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict
 
 
 class AppImageValidator:

@@ -3,10 +3,9 @@
 Fixed working bundler for creating portable AppImages with Java
 """
 
-import os
-import sys
-import subprocess
 import shutil
+import subprocess
+import sys
 import tarfile
 from pathlib import Path
 
@@ -24,7 +23,7 @@ def download_openjdk(version="11", output_dir="."):
 
     try:
         # Use curl to download
-        result = subprocess.run(
+        subprocess.run(
             ["curl", "-L", "-o", str(jdk_path), jdk_url],
             check=True,
             capture_output=True,
@@ -53,7 +52,7 @@ def extract_openjdk(jdk_path, extract_dir):
     extract_dir = Path(extract_dir)
     extract_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"📦 Extracting OpenJDK...")
+    print("📦 Extracting OpenJDK...")
 
     try:
         with tarfile.open(jdk_path, "r:gz") as tar:
@@ -251,7 +250,7 @@ StartupNotify=true
 
     # Step 8: Create final AppImage
     if Path("./appimagetool").exists():
-        print(f"🔧 Creating final AppImage...")
+        print("🔧 Creating final AppImage...")
         try:
             result = subprocess.run(
                 ["./appimagetool", "--no-appstream", str(app_dir)],
@@ -266,7 +265,7 @@ StartupNotify=true
                     size_mb = final_appimage.stat().st_size // (1024 * 1024)
                     print(f"✅ Bundled AppImage created: {final_appimage}")
                     print(f"📦 Size: {size_mb} MB")
-                    print(f"☕ Contains: OpenJDK 11 (portable)")
+                    print("☕ Contains: OpenJDK 11 (portable)")
                     print(f"🚀 Run with: ./{Path(final_appimage).name}")
                     return str(final_appimage)
             else:
@@ -274,7 +273,7 @@ StartupNotify=true
         except Exception as e:
             print(f"❌ Error running appimagetool: {e}")
     else:
-        print(f"⚠️  appimagetool not found")
+        print("⚠️  appimagetool not found")
         print(f"📦 AppImage directory created: {app_dir}")
         print(f"🔧 To create final AppImage: ./appimagetool {app_dir}")
         return str(app_dir)
@@ -294,7 +293,7 @@ if __name__ == "__main__":
     result = create_bundled_appimage(jar_file, app_name, output_dir)
     if result:
         print(f"\n🎉 Success! Created: {result}")
-        print(f"📱 This AppImage includes bundled Java - completely portable!")
+        print("📱 This AppImage includes bundled Java - completely portable!")
         sys.exit(0)
     else:
         print("❌ Failed to create bundled AppImage")

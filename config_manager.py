@@ -4,13 +4,12 @@ Configuration File Support for jar2appimage
 Supports YAML, JSON, and TOML configuration files for build settings and metadata
 """
 
-import os
-import sys
-import json
 import argparse
+import json
+import sys
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Union
-from dataclasses import dataclass, asdict
+from typing import Any, Dict, List, Optional, Union
 
 try:
     import yaml
@@ -195,17 +194,17 @@ class ConfigManager:
 
     def _load_json(self, config_path: Path) -> Dict[str, Any]:
         """Load JSON configuration"""
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, encoding="utf-8") as f:
             return json.load(f)
 
     def _load_yaml(self, config_path: Path) -> Dict[str, Any]:
         """Load YAML configuration"""
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
 
     def _load_toml(self, config_path: Path) -> Dict[str, Any]:
         """Load TOML configuration"""
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, encoding="utf-8") as f:
             return toml.load(f)
 
     def _save_json(self, config_path: Path, data: Dict[str, Any]):

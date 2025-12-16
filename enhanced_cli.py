@@ -3,20 +3,20 @@
 Enhanced jar2appimage CLI with all advanced features
 """
 
+import argparse
 import os
 import sys
-import argparse
 from pathlib import Path
 
 # Add src directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 try:
-    from jar2appimage.core import Jar2AppImage
-    from jar2appimage.java_bundler import JavaBundler
-    from config_manager import ConfigManager, auto_discover_config
     from appimage_validator import validate_appimage
     from cli_helper import show_help
+    from config_manager import ConfigManager, auto_discover_config
+    from jar2appimage.core import Jar2AppImage
+    from jar2appimage.java_bundler import JavaBundler
 except ImportError as e:
     print(f"❌ Import error: {e}")
     print("Make sure you're running this from the project root directory")
@@ -98,10 +98,10 @@ def main():
         if not args.config:
             auto_config = auto_discover_config()
             if auto_config:
-                print(f"📋 Using auto-discovered configuration")
+                print("📋 Using auto-discovered configuration")
         elif args.config:
             try:
-                config = config_manager.load_config(args.config)
+                config_manager.load_config(args.config)
                 print(f"📋 Loaded configuration from: {args.config}")
             except Exception as e:
                 print(f"⚠️  Failed to load config: {e}")
@@ -140,12 +140,12 @@ def main():
 
             # Validate if requested
             if args.validate:
-                print(f"🔍 Validating AppImage...")
+                print("🔍 Validating AppImage...")
                 validation_success = validate_appimage(appimage_path)
                 if validation_success:
-                    print(f"✅ AppImage validation passed!")
+                    print("✅ AppImage validation passed!")
                 else:
-                    print(f"⚠️  AppImage validation had issues (see report)")
+                    print("⚠️  AppImage validation had issues (see report)")
 
             # Save config if requested
             if args.save_config:

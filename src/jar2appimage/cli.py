@@ -3,10 +3,10 @@
 jar2appimage CLI with platform detection and limitations
 """
 
-import sys
+import argparse
 import os
 import platform
-import argparse
+import sys
 from pathlib import Path
 
 
@@ -55,8 +55,12 @@ def check_jar2appimage_support():
 
 
 def main():
+
     parser = argparse.ArgumentParser(
-        description="Create AppImages from JAR files (Linux only)",
+        description="Create AppImages from JAR files (Linux only)\n\n"
+                    "Examples:\n"
+                    "  jar2appimage myapp.jar --output-dir out\n"
+                    "  jar2appimage myapp.jar --bundled --jdk-version 17 --output-dir out\n",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
@@ -67,7 +71,16 @@ def main():
         default=".",
         help="Output directory for AppImage (default: current directory)",
     )
-
+    parser.add_argument(
+        "--bundled",
+        action="store_true",
+        help="Bundle a Java runtime (OpenJDK) inside the AppImage (default: use system Java)",
+    )
+    parser.add_argument(
+        "--jdk-version",
+        default="11",
+        help="OpenJDK version to bundle (default: 11). Only used with --bundled.",
+    )
     parser.add_argument(
         "--check-platform",
         "-p",
@@ -86,13 +99,14 @@ def main():
         print("   jar2appimage is ready for use on this platform.")
         return
 
+
     # Check if JAR exists
     jar_path = Path(args.jar_file)
     if not jar_path.exists():
         print(f"❌ JAR file not found: {args.jar_file}")
         sys.exit(1)
 
-    print(f"🚀 Creating AppImage for {jar_path.name}...")
+    print(f"🚀 Creating AppImage for {jar_path.name}...\n   Bundled Java: {'Yes' if args.bundled else 'No'}   JDK Version: {args.jdk_version if args.bundled else 'N/A'}")
 
     try:
         # Import jar2appimage (with error handling for import issues)
@@ -108,7 +122,7 @@ def main():
             sys.exit(1)
 
         # Create AppImage
-        app = jar2appimage.Jar2AppImage(str(jar_path), args.output_dir)
+        app = jar2appimage.Jar2AppImage(str(jar_path), args.output_dir, bundled=args.bundled, jdk_version=args.jdk_version)
         appimage_path = app.create()
 
         print(f"✅ AppImage created successfully: {appimage_path}")

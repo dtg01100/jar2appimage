@@ -1,12 +1,13 @@
 """Tests for jar2appimage"""
 
-import pytest
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-from jar2appimage.core import Jar2AppImage
+import pytest
+
 from jar2appimage.analyzer import JarDependencyAnalyzer
+from jar2appimage.core import Jar2AppImage
 from jar2appimage.runtime import JavaRuntimeManager
 
 

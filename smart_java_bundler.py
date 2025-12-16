@@ -3,18 +3,17 @@
 Smart Java bundler for jar2appimage - Automatically discovers and downloads OpenJDK
 """
 
-import os
-import sys
 import json
+import os
 import re
-import subprocess
-import tarfile
-import tempfile
 import shutil
-from pathlib import Path
-from typing import Optional, Dict, List
-import urllib.request
+import subprocess
+import sys
+import tarfile
 import urllib.error
+import urllib.request
+from pathlib import Path
+from typing import Dict, Optional
 
 
 class SmartJavaBundler:
@@ -158,7 +157,7 @@ class SmartJavaBundler:
 
         try:
             # Use curl for reliable downloads
-            result = subprocess.run(
+            subprocess.run(
                 ["curl", "-L", "--progress-bar", "-o", str(java_path), download_url],
                 check=True,
                 capture_output=True,
@@ -188,7 +187,7 @@ class SmartJavaBundler:
         extract_dir_path = Path(extract_dir)
         extract_dir_path.mkdir(parents=True, exist_ok=True)
 
-        print(f"📦 Extracting Java archive...")
+        print("📦 Extracting Java archive...")
 
         try:
             with tarfile.open(java_archive, "r:gz") as tar:

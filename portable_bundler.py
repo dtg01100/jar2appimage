@@ -4,9 +4,9 @@ Simple Java AppImage bundler demo - creates portable AppImages
 """
 
 import os
-import sys
-import subprocess
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -280,16 +280,16 @@ This AppImage is designed to be portable with bundled Java runtime.
                     print(f"✅ Portable AppImage created: {final_appimage}")
                     print(f"📦 Size: {size_mb} MB")
                     print(
-                        f"☕ Java: Smart bundling system (uses system Java, ready for bundled)"
+                        "☕ Java: Smart bundling system (uses system Java, ready for bundled)"
                     )
-                    print(f"📱 Features: Portable + Desktop Integration")
+                    print("📱 Features: Portable + Desktop Integration")
                     return str(final_appimage)
             else:
                 print(f"❌ AppImage creation failed: {result.stderr}")
         except Exception as e:
             print(f"❌ Error running appimagetool: {e}")
     else:
-        print(f"⚠️  appimagetool not found")
+        print("⚠️  appimagetool not found")
         print(f"📦 AppImage directory created: {app_dir}")
         print(f"🔧 To create final AppImage: ./appimagetool {app_dir}")
         return str(app_dir)
@@ -340,9 +340,9 @@ if __name__ == "__main__":
     result = create_portable_appimage(args.jar_file, args.name, args.output, args.arch)
     if result:
         print(f"\n🎉 Success! Created: {result}")
-        print(f"📱 This AppImage is portable and includes smart Java handling!")
+        print("📱 This AppImage is portable and includes smart Java handling!")
         print(f"🚀 Run with: ./{Path(result).name}")
-        print(f"☕ Add bundled Java to usr/java/ for true portability")
+        print("☕ Add bundled Java to usr/java/ for true portability")
         sys.exit(0)
     else:
         print("❌ Failed to create portable AppImage")

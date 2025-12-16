@@ -4,16 +4,13 @@ Automatic Dependency Detection for JAR files
 Analyzes JAR files and detects external dependencies automatically
 """
 
-import os
-import sys
-import re
 import json
+import re
+import sys
 import zipfile
-import subprocess
-from pathlib import Path
-from typing import List, Dict, Set, Optional, Tuple
 from dataclasses import dataclass
-from collections import defaultdict
+from pathlib import Path
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -245,7 +242,7 @@ class DependencyDetector:
         filename = jar_path.stem
 
         # Check known patterns
-        for vendor, info in self.known_patterns.items():
+        for _vendor, info in self.known_patterns.items():
             for pattern in info["patterns"]:
                 match = re.search(pattern, filename, re.IGNORECASE)
                 if match:
@@ -379,13 +376,13 @@ class DependencyDetector:
 
         # Text format
         report_lines = [
-            f"🔍 Dependency Analysis Report",
+            "🔍 Dependency Analysis Report",
             f"📁 JAR: {analysis['jar_path']}",
-            f"",
-            f"📋 MANIFEST INFORMATION:",
+            "",
+            "📋 MANIFEST INFORMATION:",
             f"  Main Class: {analysis['manifest_info'].get('main-class', 'Not found')}",
             f"  Class-Path entries: {len(analysis['manifest_info'].get('classpath_entries', []))}",
-            f"",
+            "",
             f"📦 MAVEN DEPENDENCIES ({len(analysis['maven_dependencies'])}):",
         ]
 
@@ -396,7 +393,7 @@ class DependencyDetector:
             )
 
         report_lines.extend(
-            [f"", f"📚 EMBEDDED LIBRARIES ({len(analysis['library_dependencies'])}):"]
+            ["", f"📚 EMBEDDED LIBRARIES ({len(analysis['library_dependencies'])}):"]
         )
 
         for lib in analysis["library_dependencies"]:
@@ -404,14 +401,14 @@ class DependencyDetector:
 
         report_lines.extend(
             [
-                f"",
-                f"🎯 SUMMARY:",
+                "",
+                "🎯 SUMMARY:",
                 f"  Total Maven dependencies: {analysis['summary']['total_maven_deps']}",
                 f"  Total embedded libraries: {analysis['summary']['total_library_deps']}",
                 f"  Total class dependencies: {analysis['summary']['total_class_deps']}",
                 f"  Missing dependencies detected: {len(analysis['summary']['missing_dependencies'])}",
-                f"",
-                f"💡 SUGGESTED CLASSPATH:",
+                "",
+                "💡 SUGGESTED CLASSPATH:",
             ]
         )
 
@@ -421,7 +418,7 @@ class DependencyDetector:
             report_lines.append(f"  • {cp_entry}")
 
         if analysis["summary"]["missing_dependencies"]:
-            report_lines.extend([f"", f"⚠️  POTENTIALLY MISSING DEPENDENCIES:"])
+            report_lines.extend(["", "⚠️  POTENTIALLY MISSING DEPENDENCIES:"])
             for missing in analysis["summary"]["missing_dependencies"][
                 :5
             ]:  # Limit to first 5
