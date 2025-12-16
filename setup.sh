@@ -10,13 +10,13 @@ install_dependencies() {
     # Check if we're on a Debian-based system
     if command -v apt-get &> /dev/null; then
         sudo apt-get update
-        sudo apt-get install -y python3 python3-pip default-jre wget curl
+        sudo apt-get install -y default-jre wget curl
     elif command -v dnf &> /dev/null; then
-        sudo dnf install -y python3 python3-pip java-17-openjdk wget curl
+        sudo dnf install -y java-17-openjdk wget curl
     elif command -v pacman &> /dev/null; then
-        sudo pacman -S --needed python python-pip jre-openjdk wget curl
+        sudo pacman -S --needed jre-openjdk wget curl
     else
-        echo "Warning: Could not detect package manager. Please install Python 3, Java, and AppImageKit manually."
+        echo "Warning: Could not detect package manager. Please install Java, and AppImageKit manually."
     fi
 }
 
@@ -31,19 +31,19 @@ download_appimagetool() {
     fi
 }
 
-# Create virtual environment and install Python dependencies
+# Setup Python environment using uv
 setup_python_env() {
-    if [ ! -d "venv" ]; then
-        echo "Creating Python virtual environment..."
-        python3 -m venv venv
+    # Check if uv is installed
+    if ! command -v uv &> /dev/null; then
+        echo "Installing uv..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh
     fi
     
-    echo "Activating virtual environment..."
-    source venv/bin/activate
+    echo "Setting up Python environment with uv..."
     
     if [ -f "requirements.txt" ]; then
-        echo "Installing Python dependencies..."
-        pip install -r requirements.txt
+        echo "Installing Python dependencies using uv..."
+        uv pip install -r requirements.txt
     fi
 }
 
@@ -56,7 +56,7 @@ main() {
     setup_python_env
     
     echo "Setup complete!"
-    echo "Usage: source venv/bin/activate && python3 jar2appimage.py <your-app.jar>"
+    echo "Usage: uv run jar2appimage.py <your-app.jar>"
 }
 
 main "$@"
