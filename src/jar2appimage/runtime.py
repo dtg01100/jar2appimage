@@ -1,9 +1,8 @@
 """Java runtime management"""
 
+import os
 import shutil
 import subprocess
-import os
-import sys
 from pathlib import Path
 
 
@@ -11,14 +10,19 @@ class JavaRuntimeManager:
     """Manages Java runtime environments"""
 
     def __init__(self):
-        import tempfile
-        self.temp_dir = Path(tempfile.mkdtemp(prefix="java_runtime_"))
-    
+        import os
+        import uuid
+        build_root = Path(os.getcwd()) / "jar2appimage_build"
+        build_root.mkdir(exist_ok=True)
+        self.temp_dir = build_root / f"java_runtime_{uuid.uuid4().hex[:8]}"
+        self.temp_dir.mkdir(exist_ok=True)
+        print(f"[DEBUG] Created JavaRuntimeManager temp_dir: {self.temp_dir}")
+
     def cleanup(self):
         """Clean up temporary directory"""
         if self.temp_dir.exists():
             shutil.rmtree(self.temp_dir)
-    
+
     def get_system_java(self):
         """Get system Java path if available"""
         java_cmd = shutil.which("java")
@@ -89,11 +93,11 @@ class JavaRuntimeManager:
                 f"/usr/lib/jvm/java-{version}-openjdk/bin/java",
                 f"/usr/lib/jvm/java-{version}/bin/java",
                 f"/opt/java-{version}/bin/java",
-                f"/usr/local/java/bin/java",
-                f"/usr/local/bin/java",
-                f"/usr/bin/java",
-                f"/bin/java",
-                f"/usr/lib/jvm/default-java/bin/java",
+                "/usr/local/java/bin/java",
+                "/usr/local/bin/java",
+                "/usr/bin/java",
+                "/bin/java",
+                "/usr/lib/jvm/default-java/bin/java",
             ]
 
             for path in common_paths:
@@ -143,9 +147,8 @@ class JavaRuntimeManager:
                 stderr=subprocess.STDOUT,
             )
             return result.stdout
-        except:
+        except Exception:
             return "Java version unknown"
 
 
 # Import os here since it's used in get_runtime
-import os

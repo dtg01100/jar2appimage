@@ -6,7 +6,6 @@ Provides comprehensive help, examples, and best practices
 
 import os
 import sys
-from pathlib import Path
 
 
 class CLIHelper:
@@ -236,7 +235,7 @@ For troubleshooting: jar2appimage --troubleshooting
     def show_detailed_help(self):
         """Show detailed help with all options"""
         print(
-            self.format_help_text(f"""
+            self.format_help_text("""
 🎯 jar2appimage - Convert JAR Files to AppImage Executables
 
 USAGE:
@@ -279,7 +278,7 @@ OPTIONS:
 """)
         )
 
-        for example_name, example_data in self.help_data["examples"].items():
+        for _example_name, example_data in self.help_data["examples"].items():
             print(f"🏷️  {example_data['title']}")
             print(f"   {example_data['description']}")
             print("   Code:")
@@ -381,7 +380,7 @@ OPTIONS:
                 result = os.system(f"which {tool} > /dev/null 2>&1")
                 available = result == 0
                 print(f"   • {tool}: {'✅' if available else '❌'}")
-            except:
+            except Exception:
                 print(f"   • {tool}: ❌")
 
 
