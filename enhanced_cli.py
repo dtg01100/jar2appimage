@@ -22,66 +22,123 @@ except ImportError as e:
     sys.exit(1)
 
 
-def main():  # noqa: C901
+def _create_argument_parser() -> argparse.ArgumentParser:
+    """Create the argument parser with all options."""
     parser = argparse.ArgumentParser(
         description="Convert JAR files to AppImage executables with advanced features",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    # Required arguments
     parser.add_argument("jar_file", help="JAR file to convert")
-
-    # Basic options
     parser.add_argument("--name", "-n", help="Application name")
-    parser.add_argument(
-        "--output-dir", "-o", default=".", help="Output directory (default: current)"
-    )
-    parser.add_argument(
-        "--main-class", "-m", help="Main class (auto-detected if not specified)"
-    )
+    parser.add_argument("--output-dir", "-o", default=".", help="Output directory (default: current)")
+    parser.add_argument("--main-class", "-m", help="Main class (auto-detected if not specified)")
     parser.add_argument("--icon", help="Icon file for the application")
-    parser.add_argument(
-        "--category", default="Utility", help="Desktop category (default: Utility)"
-    )
-
-    # Advanced options
-    parser.add_argument(
-        "--bundled", action="store_true", help="Bundle Java runtime inside AppImage"
-    )
-    parser.add_argument(
-        "--java-version", default="11", help="Java version for bundling (default: 11)"
-    )
-    parser.add_argument(
-        "--validate", action="store_true", help="Validate the created AppImage"
-    )
-    parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Show detailed output"
-    )
-
-    # Configuration
+    parser.add_argument("--category", default="Utility", help="Desktop category (default: Utility)")
+    parser.add_argument("--bundled", action="store_true", help="Bundle Java runtime inside AppImage")
+    parser.add_argument("--java-version", default="11", help="Java version for bundling (default: 11)")
+    parser.add_argument("--validate", action="store_true", help="Validate the created AppImage")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed output")
     parser.add_argument("--config", "-c", help="Configuration file path")
     parser.add_argument("--save-config", help="Save configuration to file")
-
-    # Help and utilities
-    parser.add_argument(
-        "--help-detailed", action="store_true", help="Show detailed help"
-    )
+    parser.add_argument("--help-detailed", action="store_true", help="Show detailed help")
     parser.add_argument("--examples", action="store_true", help="Show usage examples")
-    parser.add_argument(
-        "--troubleshooting", action="store_true", help="Show troubleshooting guide"
-    )
+    parser.add_argument("--troubleshooting", action="store_true", help="Show troubleshooting guide")
+    return parser
 
+
+def _handle_help_requests(args: argparse.Namespace) -> bool:
+    """Handle help requests and return True if help was shown."""
+    if args.help_detailed:
+        show_help("detailed")
+        return True
+    if args.examples:
+        show_help("examples")
+        return True
+    if args.troubleshooting:
+        show_help("troubleshooting")
+        return True
+    return False
+
+
+def _load_configuration(args: argparse.Namespace) -> ConfigManager:
+    """Load configuration from file or auto-discovery."""
+    config_manager = ConfigManager()
+
+    if not args.config:
+        auto_config = auto_discover_config()
+        if auto_config:
+            print("📋 Using auto-discovered configuration")
+    else:
+        try:
+            config_manager.load_config(args.config)
+            print(f"📋 Loaded configuration from: {args.config}")
+        except Exception as e:
+            print(f"⚠️  Failed to load config: {e}")
+
+    return config_manager
+
+
+def _configure_jar2app(jar2app: "Jar2AppImage", args: argparse.Namespace) -> None:
+    """Configure Jar2AppImage instance with parsed arguments."""
+    if args.name:
+        jar2app.set_app_name(args.name)
+    if args.main_class:
+        jar2app.set_main_class(args.main_class)
+    if args.icon:
+        jar2app.set_icon(args.icon)
+    if args.category:
+        jar2app.set_category(args.category)
+
+
+def _print_configuration(jar2app: "Jar2AppImage", args: argparse.Namespace) -> None:
+    """Print configuration details."""
+    if not args.verbose:
+        return
+
+    print("🔧 Configuration:")
+    print(f"  Application: {jar2app._app_name}")
+    print(f"  Main Class: {jar2app._main_class}")
+    print(f"  Output Dir: {args.output_dir}")
+    print(f"  Bundled Java: {args.bundled}")
+    if args.bundled:
+        print(f"  Java Version: {args.java_version}")
+
+
+def _validate_and_save(appimage_path: str, args: argparse.Namespace, config_manager: ConfigManager, jar2app: "Jar2AppImage") -> None:
+    """Validate AppImage and save configuration if requested."""
+    if args.validate:
+        print("🔍 Validating AppImage...")
+        validation_success = validate_appimage(appimage_path)
+        if validation_success:
+            print("✅ AppImage validation passed!")
+        else:
+            print("⚠️  AppImage validation had issues (see report)")
+
+    if args.save_config:
+        config_data = {
+            "name": jar2app._app_name,
+            "jar_path": args.jar_file,
+            "main_class": jar2app._main_class,
+            "icon": args.icon,
+            "category": args.category,
+            "bundled_java": args.bundled,
+            "java_version": args.java_version if args.bundled else None,
+            "output_dir": args.output_dir,
+        }
+
+        from config_manager import AppImageConfig
+
+        config_obj = AppImageConfig(**config_data)
+        config_manager.save_config(args.save_config, config_obj)
+
+
+def main():
+    parser = _create_argument_parser()
     args = parser.parse_args()
 
     # Handle help requests
-    if args.help_detailed:
-        show_help("detailed")
-        return 0
-    elif args.examples:
-        show_help("examples")
-        return 0
-    elif args.troubleshooting:
-        show_help("troubleshooting")
+    if _handle_help_requests(args):
         return 0
 
     # Check JAR file exists
@@ -90,85 +147,25 @@ def main():  # noqa: C901
         return 1
 
     try:
-        # Load configuration
-        config_manager = ConfigManager()
-
-        # Try to auto-discover config if none specified
-        if not args.config:
-            auto_config = auto_discover_config()
-            if auto_config:
-                print("📋 Using auto-discovered configuration")
-        elif args.config:
-            try:
-                config_manager.load_config(args.config)
-                print(f"📋 Loaded configuration from: {args.config}")
-            except Exception as e:
-                print(f"⚠️  Failed to load config: {e}")
-
-        # Create Jar2AppImage instance
+        config_manager = _load_configuration(args)
         print(f"🚀 Creating AppImage for: {args.jar_file}")
 
         jar2app = Jar2AppImage(
             jar_file=args.jar_file, output_dir=args.output_dir, bundled=args.bundled
         )
 
-        # Set options
-        if args.name:
-            jar2app.set_app_name(args.name)
-        if args.main_class:
-            jar2app.set_main_class(args.main_class)
-        if args.icon:
-            jar2app.set_icon(args.icon)
-        if args.category:
-            jar2app.set_category(args.category)
-
-        # Create AppImage
-        if args.verbose:
-            print("🔧 Configuration:")
-            print(f"  Application: {jar2app._app_name}")
-            print(f"  Main Class: {jar2app._main_class}")
-            print(f"  Output Dir: {args.output_dir}")
-            print(f"  Bundled Java: {args.bundled}")
-            if args.bundled:
-                print(f"  Java Version: {args.java_version}")
+        _configure_jar2app(jar2app, args)
+        _print_configuration(jar2app, args)
 
         appimage_path = jar2app.create()
 
         if appimage_path and os.path.exists(appimage_path):
             print(f"✅ AppImage created successfully: {appimage_path}")
-
-            # Validate if requested
-            if args.validate:
-                print("🔍 Validating AppImage...")
-                validation_success = validate_appimage(appimage_path)
-                if validation_success:
-                    print("✅ AppImage validation passed!")
-                else:
-                    print("⚠️  AppImage validation had issues (see report)")
-
-            # Save config if requested
-            if args.save_config:
-                config_data = {
-                    "name": jar2app._app_name,
-                    "jar_path": args.jar_file,
-                    "main_class": jar2app._main_class,
-                    "icon": args.icon,
-                    "category": args.category,
-                    "bundled_java": args.bundled,
-                    "java_version": args.java_version if args.bundled else None,
-                    "output_dir": args.output_dir,
-                }
-
-                # Create a config object
-                from config_manager import AppImageConfig
-
-                config_obj = AppImageConfig(**config_data)
-                config_manager.save_config(args.save_config, config_obj)
-
+            _validate_and_save(appimage_path, args, config_manager, jar2app)
             return 0
-        else:
-            print("❌ Failed to create AppImage")
-            return 1
+
+        print("❌ Failed to create AppImage")
+        return 1
 
     except KeyboardInterrupt:
         print("\n❌ Operation cancelled by user")
@@ -177,7 +174,6 @@ def main():  # noqa: C901
         print(f"❌ Error: {e}")
         if args.verbose:
             import traceback
-
             traceback.print_exc()
         return 1
 

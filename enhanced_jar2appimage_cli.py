@@ -248,10 +248,8 @@ def show_java_summary():
         logger.error(f"Could not get Java summary: {e}")
 
 
-def main():  # noqa: C901
-    # Setup logging for CLI mode
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
-
+def _setup_argument_parser() -> argparse.ArgumentParser:
+    """Create argument parser for enhanced jar2appimage."""
     parser = argparse.ArgumentParser(
         description="Enhanced jar2appimage with Portable Java Detection and Management",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -266,71 +264,24 @@ Examples:
     )
 
     parser.add_argument("jar_file", nargs="?", help="JAR file to convert")
-    parser.add_argument(
-        "--output-dir",
-        "-o",
-        default=".",
-        help="Output directory for AppImage (default: current directory)",
-    )
+    parser.add_argument("--output-dir", "-o", default=".", help="Output directory for AppImage (default: current directory)")
+    parser.add_argument("--bundled", action="store_true", help="Create AppImage with bundled portable Java for true portability")
+    parser.add_argument("--no-bundled", action="store_true", help="Create AppImage using system Java (default behavior)")
+    parser.add_argument("--no-portable", action="store_true", help="Disable portable Java detection and offering")
+    parser.add_argument("--jdk-version", default="auto", choices=["8", "11", "17", "21", "auto"], help="Java version for bundling (default: auto - uses latest LTS)")
+    parser.add_argument("--java-summary", action="store_true", help="Show Java detection summary and exit")
+    parser.add_argument("--detect-java", action="store_true", help="Detect and analyze system Java installation")
+    parser.add_argument("--clear-java-cache", action="store_true", help="Clear Java download cache")
+    parser.add_argument("--force-download", action="store_true", help="Force download Java even if cached version exists")
+    parser.add_argument("--check-platform", "-p", action="store_true", help="Check platform compatibility only")
+    return parser
 
-    # Enhanced Java bundling options
-    parser.add_argument(
-        "--bundled",
-        action="store_true",
-        help="Create AppImage with bundled portable Java for true portability",
-    )
-    parser.add_argument(
-        "--no-bundled",
-        action="store_true",
-        help="Create AppImage using system Java (default behavior)",
-    )
-    parser.add_argument(
-        "--no-portable",
-        action="store_true",
-        help="Disable portable Java detection and offering",
-    )
-    parser.add_argument(
-        "--jdk-version",
-        default="auto",
-        choices=["8", "11", "17", "21", "auto"],
-        help="Java version for bundling (default: auto - uses latest LTS)",
-    )
 
-    # Java management options
-    parser.add_argument(
-        "--java-summary",
-        action="store_true",
-        help="Show Java detection summary and exit",
-    )
-    parser.add_argument(
-        "--detect-java",
-        action="store_true",
-        help="Detect and analyze system Java installation",
-    )
-    parser.add_argument(
-        "--clear-java-cache",
-        action="store_true",
-        help="Clear Java download cache",
-    )
-    parser.add_argument(
-        "--force-download",
-        action="store_true",
-        help="Force download Java even if cached version exists",
-    )
-
-    parser.add_argument(
-        "--check-platform",
-        "-p",
-        action="store_true",
-        help="Check platform compatibility only",
-    )
-
-    args = parser.parse_args()
-
-    # Handle Java management commands
+def _handle_java_management_commands(args: argparse.Namespace) -> bool:
+    """Handle Java management commands. Returns True if command was handled."""
     if args.java_summary:
         show_java_summary()
-        return
+        return True
 
     if args.clear_java_cache:
         if PORTABLE_JAVA_AVAILABLE:
@@ -344,7 +295,7 @@ Examples:
         else:
             print("⚠️  Portable Java Manager not available")
             logger.warning("Cannot clear cache: Portable Java Manager not available")
-        return
+        return True
 
     if args.detect_java:
         if PORTABLE_JAVA_AVAILABLE:
@@ -354,7 +305,7 @@ Examples:
                 print(f"✅ Found Java {java_info['version']} ({java_info['type']})")
                 print(f"   Command: {java_info['command']}")
                 print(f"   Compatible: {java_info['is_compatible']}")
-                if java_info['java_home']:
+                if java_info.get('java_home'):
                     print(f"   JAVA_HOME: {java_info['java_home']}")
                 logger.info(f"Found Java {java_info['version']} ({java_info['type']})")
             else:
@@ -363,18 +314,106 @@ Examples:
         else:
             print("⚠️  Portable Java Manager not available")
             logger.warning("Cannot detect Java: Portable Java Manager not available")
-        return
+        return True
 
-    # Check platform support
-    if not check_jar2appimage_support():
-        sys.exit(1)
+    return False
 
-    if args.check_platform:
-        print("\n🔍 Platform compatibility check complete.")
-        print("   Enhanced jar2appimage is ready for use on this platform.")
-        return
 
-    # Check if JAR exists
+def _determine_java_version(bundled: bool, java_version: str, jar_path: str) -> str:
+    """Determine which Java version to use based on options."""
+    if not bundled:
+        if java_version == "auto":
+            java_version = "11"
+            print(f"🎯 System Java mode, default version: {java_version}")
+            logger.info(f"System Java mode, default version: {java_version}")
+        return java_version
+
+    # Bundled mode with portable Java detection
+    if not PORTABLE_JAVA_AVAILABLE:
+        if java_version == "auto" and AUTO_JAVA_AVAILABLE:
+            try:
+                downloader = JavaAutoDownloader()
+                java_version = downloader.get_latest_lts_version()
+                print(f"🎯 Auto-detected latest LTS Java version: {java_version}")
+                logger.info(f"Auto-detected Java version: {java_version}")
+            except Exception as e:
+                java_version = "11"
+                print(f"⚠️  Auto-detection failed: {e}, using version 11")
+                logger.warning(f"Auto-detection failed: {e}, using version 11")
+        elif java_version == "auto":
+            java_version = "11"
+            print(f"🎯 Using default Java version: {java_version}")
+            logger.info(f"Using default Java version: {java_version}")
+        return java_version
+
+    # Portable Java available
+    print("🔍 Using enhanced portable Java detection...")
+    logger.info("Using enhanced portable Java detection")
+    detected_java, _, _ = check_java_requirements(jar_path)
+
+    if detected_java:
+        if java_version == "auto":
+            java_version = detected_java
+            print(f"🎯 Auto-detected Java version: {java_version}")
+        else:
+            print(f"🎯 Using specified Java version: {java_version}")
+        return java_version
+
+    # Fallback
+    if java_version == "auto":
+        java_version = "11"
+    return java_version
+
+
+def _create_appimage_bundled(jar_path: Path, args: argparse.Namespace, java_version: str) -> str | None:
+    """Create AppImage with enhanced bundled Java support."""
+    if PORTABLE_JAVA_AVAILABLE and not args.no_portable:
+        _, download_consented, portable_manager = check_java_requirements(str(jar_path))
+        if download_consented and portable_manager:
+            handle_java_download(portable_manager, java_version)
+        return create_appimage_with_portable_java(
+            str(jar_path), args.output_dir, True, java_version, portable_manager
+        )
+
+    # Fallback to standard creation
+    sys.path.insert(0, str(Path(__file__).parent / "src"))
+    import jar2appimage
+
+    app = jar2appimage.Jar2AppImage(str(jar_path), args.output_dir, bundled=True, jdk_version=java_version)
+    return app.create()
+
+
+def _create_appimage_system(jar_path: Path, args: argparse.Namespace, java_version: str) -> str | None:
+    """Create AppImage using system Java."""
+    sys.path.insert(0, str(Path(__file__).parent / "src"))
+    import jar2appimage
+
+    app = jar2appimage.Jar2AppImage(str(jar_path), args.output_dir, bundled=False, jdk_version=java_version)
+    return app.create()
+
+
+def _print_appimage_success(appimage_path: str, bundled: bool) -> None:
+    """Print success message and usage information."""
+    print("\n✅ AppImage created successfully!")
+    print(f"📦 File: {appimage_path}")
+    print(f"📏 Size: {os.path.getsize(appimage_path) // 1024 // 1024} MB")
+    print("\n🎯 Usage:")
+    print(f"   Run: ./{os.path.basename(appimage_path)}")
+    print(f"   Options: ./{os.path.basename(appimage_path)} --help")
+
+    if bundled:
+        print("\n📦 Enhanced Features:")
+        print("   • Self-contained AppImage with portable Java")
+        print("   • No external Java dependency required")
+        print("   • Works on any Linux distribution")
+        print("   • Latest security updates and features")
+        if PORTABLE_JAVA_AVAILABLE:
+            print("   • Intelligent Java requirement detection")
+            print("   • User-consented Java downloads")
+
+
+def _validate_jar_file(args: argparse.Namespace) -> Path:
+    """Validate JAR file exists and return Path."""
     if not args.jar_file:
         print("❌ JAR file is required")
         print("   Usage: enhanced_jar2appimage_cli.py <jar_file> [options]")
@@ -386,58 +425,45 @@ Examples:
         logger.error(f"JAR file not found: {args.jar_file}")
         sys.exit(1)
 
-    # Determine bundling mode
+    return jar_path
+
+
+def _setup_and_validate(args: argparse.Namespace) -> tuple:
+    """Setup and validate all options. Returns (bundled, java_version, jar_path)."""
+    jar_path = _validate_jar_file(args)
+
     bundled = args.bundled and not args.no_bundled
     if args.bundled and args.no_bundled:
         print("❌ Cannot use both --bundled and --no-bundled options")
         logger.error("Conflicting bundling options: --bundled and --no-bundled both specified")
         sys.exit(1)
 
-    # Enhanced Java version handling
-    java_version = args.jdk_version
+    java_version = _determine_java_version(bundled, args.jdk_version, str(jar_path))
+    return bundled, java_version, jar_path
 
-    if bundled:
-        # Use portable Java detection and management
-        if not args.no_portable and PORTABLE_JAVA_AVAILABLE:
-            print("🔍 Using enhanced portable Java detection...")
-            logger.info("Using enhanced portable Java detection")
-            detected_java, download_consented, portable_manager = check_java_requirements(str(jar_path))
 
-            if detected_java:
-                if java_version == "auto":
-                    java_version = detected_java
-                    print(f"🎯 Auto-detected Java version: {java_version}")
-                else:
-                    print(f"🎯 Using specified Java version: {java_version}")
+def main():
+    # Setup logging for CLI mode
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
-            # Handle download if consented
-            if download_consented and portable_manager:
-                downloaded_path = handle_java_download(portable_manager, java_version)
-                if not downloaded_path:
-                    print("⚠️  Download failed, continuing with system Java")
-                    logger.warning("Download failed, continuing with system Java")
-        else:
-            # Fallback to simple auto-detection
-            if java_version == "auto" and AUTO_JAVA_AVAILABLE:
-                try:
-                    downloader = JavaAutoDownloader()
-                    java_version = downloader.get_latest_lts_version()
-                    print(f"🎯 Auto-detected latest LTS Java version: {java_version}")
-                    logger.info(f"Auto-detected Java version: {java_version}")
-                except Exception as e:
-                    print(f"⚠️  Auto-detection failed: {e}, using version 11")
-                    java_version = "11"
-                    logger.warning(f"Auto-detection failed: {e}, using version 11")
-            elif java_version == "auto":
-                java_version = "11"
-                print(f"🎯 Using default Java version: {java_version}")
-                logger.info(f"Using default Java version: {java_version}")
-    else:
-        # Non-bundled mode - just determine version for reference
-        if java_version == "auto":
-            java_version = "11"
-            print(f"🎯 System Java mode, default version: {java_version}")
-            logger.info(f"System Java mode, default version: {java_version}")
+    parser = _setup_argument_parser()
+    args = parser.parse_args()
+
+    # Handle Java management commands
+    if _handle_java_management_commands(args):
+        return
+
+    # Check platform support
+    if not check_jar2appimage_support():
+        sys.exit(1)
+
+    if args.check_platform:
+        print("\n🔍 Platform compatibility check complete.")
+        print("   Enhanced jar2appimage is ready for use on this platform.")
+        return
+
+    # Setup and validate
+    bundled, java_version, jar_path = _setup_and_validate(args)
 
     print(f"🚀 Creating AppImage for {jar_path.name}...")
     logger.info(f"Creating AppImage for {jar_path.name} with bundled={bundled}, java_version={java_version}")
@@ -451,42 +477,11 @@ Examples:
         print("☕ Java bundling: DISABLED (using system Java)")
 
     try:
-        # Create AppImage with enhanced Java support
-        if bundled and PORTABLE_JAVA_AVAILABLE and not args.no_portable:
-            appimage_path = create_appimage_with_portable_java(
-                str(jar_path), args.output_dir, bundled, java_version, portable_manager
-            )
-        else:
-            # Fallback to standard creation
-            sys.path.insert(0, str(Path(__file__).parent / "src"))
-            import jar2appimage
-
-            app = jar2appimage.Jar2AppImage(
-                str(jar_path),
-                args.output_dir,
-                bundled=bundled,
-                jdk_version=java_version
-            )
-            appimage_path = app.create()
+        # Create AppImage
+        appimage_path = _create_appimage_bundled(jar_path, args, java_version) if bundled else _create_appimage_system(jar_path, args, java_version)
 
         if appimage_path:
-            print("\n✅ AppImage created successfully!")
-            print(f"📦 File: {appimage_path}")
-            print(f"📏 Size: {os.path.getsize(appimage_path) // 1024 // 1024} MB")
-            print("\n🎯 Usage:")
-            print(f"   Run: ./{os.path.basename(appimage_path)}")
-            print(f"   Options: ./{os.path.basename(appimage_path)} --help")
-
-            if bundled:
-                print("\n📦 Enhanced Features:")
-                print("   • Self-contained AppImage with portable Java")
-                print("   • No external Java dependency required")
-                print("   • Works on any Linux distribution")
-                print("   • Latest security updates and features")
-                if PORTABLE_JAVA_AVAILABLE and not args.no_portable:
-                    print("   • Intelligent Java requirement detection")
-                    print("   • User-consented Java downloads")
-
+            _print_appimage_success(appimage_path, bundled)
             logger.info(f"AppImage created successfully: {appimage_path}")
         else:
             print("❌ AppImage creation failed")

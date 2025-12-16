@@ -292,11 +292,8 @@ class AppImageValidator:
 
         return results
 
-    def generate_validation_report(self) -> str:  # noqa: C901
-        """Generate comprehensive validation report"""
-        print("📊 Generating validation report...")
-
-        # Run all validations
+    def _run_all_validations(self) -> None:
+        """Run all validation checks."""
         self.results["file_validation"] = self.validate_file()
         self.results["runtime_validation"] = self.test_runtime_execution()
 
@@ -304,7 +301,8 @@ class AppImageValidator:
             self.results["structure_validation"] = self.extract_and_validate_structure()
             self.results["integration_tests"] = self.validate_desktop_integration()
 
-        # Calculate overall status
+    def _calculate_overall_status(self) -> None:
+        """Calculate overall validation status."""
         file_ok = (
             self.results["file_validation"].get("is_executable", False)
             and self.results["file_validation"].get("is_elf", False)
@@ -326,7 +324,28 @@ class AppImageValidator:
         else:
             self.results["overall_status"] = "failed"
 
-        # Generate report
+    def _format_validation_section(self, title: str, data: dict) -> list:
+        """Format a section of validation results."""
+        lines = ["", title, "-" * 30]
+        for key, value in data.items():
+            if key == "extraction_output":
+                continue
+            if isinstance(value, bool):
+                status = "✅" if value else "❌"
+                lines.append(f"  {status} {key.replace('_', ' ').title()}: {value}")
+            else:
+                lines.append(f"  📝 {key.replace('_', ' ').title()}: {value}")
+        return lines
+
+    def generate_validation_report(self) -> str:
+        """Generate comprehensive validation report"""
+        print("📊 Generating validation report...")
+
+        # Run all validations
+        self._run_all_validations()
+        self._calculate_overall_status()
+
+        # Generate report header
         report_lines = [
             "=" * 60,
             "🎯 APPIMAGE VALIDATION REPORT",
@@ -338,44 +357,21 @@ class AppImageValidator:
             "-" * 30,
         ]
 
+        # Add file validation results
         for key, value in self.results["file_validation"].items():
             status = "✅" if value else "❌"
             report_lines.append(f"  {status} {key.replace('_', ' ').title()}: {value}")
 
+        # Add structure validation if available
         if "structure_validation" in self.results:
-            report_lines.extend(["", "🔧 STRUCTURE VALIDATION:", "-" * 30])
+            report_lines.extend(self._format_validation_section("🔧 STRUCTURE VALIDATION:", self.results["structure_validation"]))
 
-            for key, value in self.results["structure_validation"].items():
-                if key != "extraction_output":
-                    status = "✅" if value else "❌"
-                    report_lines.append(
-                        f"  {status} {key.replace('_', ' ').title()}: {value}"
-                    )
+        # Add runtime validation
+        report_lines.extend(self._format_validation_section("🚀 RUNTIME VALIDATION:", self.results["runtime_validation"]))
 
-        report_lines.extend(["", "🚀 RUNTIME VALIDATION:", "-" * 30])
-
-        for key, value in self.results["runtime_validation"].items():
-            if isinstance(value, bool):
-                status = "✅" if value else "❌"
-                report_lines.append(
-                    f"  {status} {key.replace('_', ' ').title()}: {value}"
-                )
-            else:
-                report_lines.append(f"  📝 {key.replace('_', ' ').title()}: {value}")
-
+        # Add desktop integration if available
         if "integration_tests" in self.results:
-            report_lines.extend(["", "📋 DESKTOP INTEGRATION:", "-" * 30])
-
-            for key, value in self.results["integration_tests"].items():
-                if isinstance(value, bool):
-                    status = "✅" if value else "❌"
-                    report_lines.append(
-                        f"  {status} {key.replace('_', ' ').title()}: {value}"
-                    )
-                else:
-                    report_lines.append(
-                        f"  📝 {key.replace('_', ' ').title()}: {value}"
-                    )
+            report_lines.extend(self._format_validation_section("📋 DESKTOP INTEGRATION:", self.results["integration_tests"]))
 
         # Add recommendations
         report_lines.extend(["", "💡 RECOMMENDATIONS:", "-" * 30])

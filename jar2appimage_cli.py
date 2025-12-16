@@ -88,7 +88,8 @@ def auto_download_java(output_dir: str = ".", java_version: str = None):
         return None
 
 
-def main():  # noqa: C901
+def _setup_parser() -> argparse.ArgumentParser:
+    """Create and configure argument parser."""
     parser = argparse.ArgumentParser(
         description="Create AppImages from JAR files (Linux only)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -101,8 +102,6 @@ def main():  # noqa: C901
         default=".",
         help="Output directory for AppImage (default: current directory)",
     )
-
-    # Java bundling options
     parser.add_argument(
         "--bundled",
         action="store_true",
@@ -119,14 +118,96 @@ def main():  # noqa: C901
         choices=["8", "11", "17", "21", "auto"],
         help="OpenJDK version for bundling (default: auto - uses latest LTS)",
     )
-
     parser.add_argument(
         "--check-platform",
         "-p",
         action="store_true",
         help="Check platform compatibility only",
     )
+    return parser
 
+
+def _validate_bundling_options(bundled: bool, no_bundled: bool) -> bool:
+    """Validate bundling options."""
+    if bundled and no_bundled:
+        print("❌ Cannot use both --bundled and --no-bundled options")
+        return False
+    return True
+
+
+def _get_java_version(bundled: bool, jdk_version: str) -> str:
+    """Determine which Java version to use."""
+    if not bundled:
+        return jdk_version
+
+    if jdk_version == "auto":
+        java_version = get_auto_java_version()
+        print(f"🎯 Auto-detected latest LTS Java version: {java_version}")
+        return java_version
+
+    print(f"🎯 Using specified Java version: {jdk_version}")
+    return jdk_version
+
+
+def _prepare_bundled_java(bundled: bool, java_version: str, output_dir: str) -> None:
+    """Prepare bundled Java if needed."""
+    if not bundled:
+        print("☕ Java bundling: DISABLED (using system Java)")
+        return
+
+    print(f"📦 Java bundling: ENABLED (OpenJDK {java_version})")
+    print(f"📥 Checking for Java {java_version} availability...")
+    downloaded_java = auto_download_java(output_dir, java_version)
+    if downloaded_java:
+        print(f"✅ Java {java_version} ready for bundling")
+    else:
+        print("⚠️  Java download failed, bundling may fail")
+
+
+def _create_appimage(jar_path: Path, output_dir: str, bundled: bool, java_version: str) -> str:
+    """Create the AppImage."""
+    sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+    try:
+        import jar2appimage
+    except ImportError as e:
+        print(f"❌ Cannot import jar2appimage: {e}")
+        print("   Please ensure all dependencies are installed:")
+        print("     • Python 3.7+")
+        print("     • Required Python packages (click, requests, etc.)")
+        sys.exit(1)
+
+    app = jar2appimage.Jar2AppImage(
+        str(jar_path),
+        output_dir,
+        bundled=bundled,
+        jdk_version=java_version
+    )
+    return app.create()
+
+
+def _print_success_info(appimage_path: str, bundled: bool, jdk_version: str) -> None:
+    """Print success information."""
+    print(f"✅ AppImage created successfully: {appimage_path}")
+    print(f"   Size: {os.path.getsize(appimage_path) // 1024 // 1024} MB")
+    print()
+    print("🎯 Usage:")
+    print(f"   Run: ./{os.path.basename(appimage_path)}")
+    print(f"   Options: ./{os.path.basename(appimage_path)} --help")
+
+    if bundled:
+        print()
+        print("📦 Java Bundling Features:")
+        print("   • Self-contained AppImage with bundled OpenJDK")
+        print("   • No external Java dependency required")
+        print("   • Works on any Linux distribution")
+        print("   • Professional enterprise deployment")
+        if jdk_version == "auto":
+            print("   • Automatic latest LTS Java version detection")
+
+
+def main():
+    parser = _setup_parser()
     args = parser.parse_args()
 
     # Check platform support
@@ -146,74 +227,18 @@ def main():  # noqa: C901
 
     # Determine bundling mode
     bundled = args.bundled and not args.no_bundled
-    if args.bundled and args.no_bundled:
-        print("❌ Cannot use both --bundled and --no-bundled options")
+    if not _validate_bundling_options(args.bundled, args.no_bundled):
         sys.exit(1)
 
-    # Handle Java version selection
-    if bundled:
-        if args.jdk_version == "auto":
-            java_version = get_auto_java_version()
-            print(f"🎯 Auto-detected latest LTS Java version: {java_version}")
-        else:
-            java_version = args.jdk_version
-            print(f"🎯 Using specified Java version: {java_version}")
-    else:
-        java_version = args.jdk_version
+    # Get Java version
+    java_version = _get_java_version(bundled, args.jdk_version)
 
     print(f"🚀 Creating AppImage for {jar_path.name}...")
-    if bundled:
-        print(f"📦 Java bundling: ENABLED (OpenJDK {java_version})")
-
-        # Automatically download Java if needed
-        print(f"📥 Checking for Java {java_version} availability...")
-        downloaded_java = auto_download_java(args.output_dir, java_version)
-        if downloaded_java:
-            print(f"✅ Java {java_version} ready for bundling")
-        else:
-            print("⚠️  Java download failed, bundling may fail")
-    else:
-        print("☕ Java bundling: DISABLED (using system Java)")
+    _prepare_bundled_java(bundled, java_version, args.output_dir)
 
     try:
-        # Import jar2appimage (with error handling for import issues)
-        sys.path.insert(0, str(Path(__file__).parent / "src"))
-
-        try:
-            import jar2appimage
-        except ImportError as e:
-            print(f"❌ Cannot import jar2appimage: {e}")
-            print("   Please ensure all dependencies are installed:")
-            print("     • Python 3.7+")
-            print("     • Required Python packages (click, requests, etc.)")
-            sys.exit(1)
-
-        # Create AppImage with bundling options
-        app = jar2appimage.Jar2AppImage(
-            str(jar_path),
-            args.output_dir,
-            bundled=bundled,
-            jdk_version=java_version
-        )
-        appimage_path = app.create()
-
-        print(f"✅ AppImage created successfully: {appimage_path}")
-        print(f"   Size: {os.path.getsize(appimage_path) // 1024 // 1024} MB")
-        print()
-        print("🎯 Usage:")
-        print(f"   Run: ./{os.path.basename(appimage_path)}")
-        print(f"   Options: ./{os.path.basename(appimage_path)} --help")
-
-        if bundled:
-            print()
-            print("📦 Java Bundling Features:")
-            print("   • Self-contained AppImage with bundled OpenJDK")
-            print("   • No external Java dependency required")
-            print("   • Works on any Linux distribution")
-            print("   • Professional enterprise deployment")
-            if args.jdk_version == "auto":
-                print("   • Automatic latest LTS Java version detection")
-
+        appimage_path = _create_appimage(jar_path, args.output_dir, bundled, java_version)
+        _print_success_info(appimage_path, bundled, java_version)
     except Exception as e:
         print(f"❌ Error creating AppImage: {e}")
         sys.exit(1)

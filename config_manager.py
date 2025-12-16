@@ -290,52 +290,40 @@ class ConfigManager:
         else:
             raise ValueError(f"Unsupported format: {format}")
 
-    def validate_config(self, config: Optional[AppImageConfig] = None) -> List[str]:  # noqa: C901
-        """Validate configuration and return list of issues"""
-        config = config or self.current_config
-        issues = []
-        logger.debug("Validating configuration")
-
-        # Check required fields
+    def _validate_jar_path(self, config: AppImageConfig, issues: List[str]) -> None:
+        """Validate JAR path."""
         if not config.jar_path:
             issues.append("jar_path is required")
         elif not Path(config.jar_path).exists():
             issues.append(f"JAR file not found: {config.jar_path}")
 
-        # Validate icon if specified
+    def _validate_icon_file(self, config: AppImageConfig, issues: List[str]) -> None:
+        """Validate icon file if specified."""
         if config.icon and not Path(config.icon).exists():
             issues.append(f"Icon file not found: {config.icon}")
 
-        # Validate category
+    def _validate_category(self, config: AppImageConfig, issues: List[str]) -> None:
+        """Validate desktop category."""
         valid_categories = [
-            "AudioVideo",
-            "Development",
-            "Education",
-            "Game",
-            "Graphics",
-            "Network",
-            "Office",
-            "Science",
-            "Settings",
-            "System",
-            "Utility",
+            "AudioVideo", "Development", "Education", "Game", "Graphics",
+            "Network", "Office", "Science", "Settings", "System", "Utility",
         ]
         if config.category and config.category not in valid_categories:
             issues.append(
                 f"Invalid category: {config.category}. Valid: {', '.join(valid_categories)}"
             )
 
-        # Validate output directory
+    def _validate_output_directory(self, config: AppImageConfig, issues: List[str]) -> None:
+        """Validate and create output directory."""
         output_path = Path(config.output_dir)
         if not output_path.exists():
             try:
                 output_path.mkdir(parents=True, exist_ok=True)
             except Exception as e:
-                issues.append(
-                    f"Cannot create output directory {config.output_dir}: {e}"
-                )
+                issues.append(f"Cannot create output directory {config.output_dir}: {e}")
 
-        # Validate dependencies and libraries
+    def _validate_dependencies(self, config: AppImageConfig, issues: List[str]) -> None:
+        """Validate dependencies and libraries."""
         for dep in config.dependencies or []:
             if not Path(dep).exists():
                 issues.append(f"Dependency not found: {dep}")
@@ -343,6 +331,18 @@ class ConfigManager:
         for lib in config.libraries or []:
             if not Path(lib).exists():
                 issues.append(f"Library not found: {lib}")
+
+    def validate_config(self, config: Optional[AppImageConfig] = None) -> List[str]:
+        """Validate configuration and return list of issues"""
+        config = config or self.current_config
+        issues: List[str] = []
+        logger.debug("Validating configuration")
+
+        self._validate_jar_path(config, issues)
+        self._validate_icon_file(config, issues)
+        self._validate_category(config, issues)
+        self._validate_output_directory(config, issues)
+        self._validate_dependencies(config, issues)
 
         if issues:
             logger.warning(f"Configuration validation failed with {len(issues)} issues")

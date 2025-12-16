@@ -72,60 +72,21 @@ def extract_openjdk(jdk_path, extract_dir):
         return None
 
 
-def create_bundled_appimage(jar_file, app_name="SQLWorkbench", output_dir="."):  # noqa: C901
-    """Create AppImage with bundled Java"""
-
-    jar_file = Path(jar_file)
-    if not jar_file.exists():
-        print(f"❌ JAR file not found: {jar_file}")
-        return None
-
-    output_dir = Path(output_dir)
-    app_dir = output_dir / f"{app_name}-Bundled.AppImage"
-
-    print(f"🚀 Creating bundled AppImage for {app_name}...")
-
-    # Clean up any existing AppImage
-    if app_dir.exists():
-        shutil.rmtree(app_dir)
-
-    # Create AppImage structure
-    app_dir.mkdir(parents=True)
-    usr_dir = app_dir / "usr"
-    usr_bin_dir = usr_dir / "bin"
-    usr_lib_dir = usr_dir / "lib"
-    usr_java_dir = usr_dir / "java"
-    usr_share_dir = usr_dir / "share"
-    usr_share_app_dir = usr_share_dir / "applications"
-
-    for dir_path in [
-        usr_bin_dir,
-        usr_lib_dir,
-        usr_java_dir,
-        usr_share_dir,
-        usr_share_app_dir,
-    ]:
-        dir_path.mkdir(parents=True, exist_ok=True)
-
-    # Step 1: Copy JAR file
+def _copy_jar_file(jar_file: Path, usr_bin_dir: Path, app_name: str) -> None:
+    """Copy JAR file to AppImage bin directory."""
     dest_jar = usr_bin_dir / f"{app_name.lower()}.jar"
     shutil.copy2(jar_file, dest_jar)
     print(f"📦 Copied JAR: {dest_jar}")
 
-    # Step 2: Download and extract OpenJDK
-    jdk_archive = download_openjdk("11", output_dir)
-    if not jdk_archive:
-        print("❌ Failed to download OpenJDK")
-        return None
 
+def _bundle_java(jdk_archive: Path, usr_java_dir: Path, output_dir: Path) -> bool:
+    """Extract and bundle Java into AppImage."""
     jdk_dir = extract_openjdk(jdk_archive, output_dir)
     if not jdk_dir:
         print("❌ Failed to extract OpenJDK")
-        return None
+        return False
 
-    # Step 3: Copy Java to AppImage
     try:
-        # Copy entire JDK contents to usr/java
         for item in jdk_dir.iterdir():
             src = jdk_dir / item.name
             dst = usr_java_dir / item.name
@@ -135,18 +96,17 @@ def create_bundled_appimage(jar_file, app_name="SQLWorkbench", output_dir="."): 
                 shutil.copy2(src, dst)
 
         print(f"☕ Bundled Java: {usr_java_dir}")
-
-        # Clean up downloaded JDK
         jdk_archive.unlink()
         shutil.rmtree(jdk_dir, ignore_errors=True)
-
+        return True
     except Exception as e:
         print(f"❌ Failed to copy Java: {e}")
-        return None
+        return False
 
-    # Step 4: Copy any existing dependencies
+
+def _copy_dependencies(jar_file: Path, usr_lib_dir: Path) -> None:
+    """Copy JAR dependencies to lib directory."""
     if jar_file.parent.name == "test_jars":
-        # Copy common JAR dependencies
         for dep_name in ["commons-cli-1.5.0.jar", "commons-lang3-3.12.0.jar"]:
             src = jar_file.parent / dep_name
             if src.exists():
@@ -154,7 +114,9 @@ def create_bundled_appimage(jar_file, app_name="SQLWorkbench", output_dir="."): 
                 shutil.copy2(src, dst)
                 print(f"📦 Copied dependency: {dep_name}")
 
-    # Step 5: Create proper AppRun script for bundled Java
+
+def _create_apprun_script(app_dir: Path, app_name: str) -> None:
+    """Create AppRun script for bundled Java."""
     apprun_content = f"""#!/bin/sh
 HERE="$(dirname "$(readlink -f "${{0}}")")"
 export PATH="${{HERE}}/usr/java/bin:${{PATH}}"
@@ -205,14 +167,15 @@ fi
 # Fallback: try main class directly
 exec "$JAVA_CMD" $JAVA_OPTS -cp "$CLASSPATH" workbench.sql.Workbench "$@"
 """
-
     apprun_path = app_dir / "AppRun"
     with open(apprun_path, "w") as f:
         f.write(apprun_content)
     apprun_path.chmod(0o755)
     print(f"📝 Created AppRun: {apprun_path}")
 
-    # Step 6: Create desktop file
+
+def _create_desktop_file(app_name: str, usr_share_app_dir: Path) -> None:
+    """Create desktop file for application."""
     desktop_content = f"""[Desktop Entry]
 Type=Application
 Name={app_name}
@@ -223,62 +186,118 @@ Categories=Development;Database;
 Terminal=false
 StartupNotify=true
 """
-
     desktop_path = usr_share_app_dir / f"{app_name.lower()}.desktop"
     with open(desktop_path, "w") as f:
         f.write(desktop_content)
     print(f"📝 Created desktop file: {desktop_path}")
 
-    # Step 7: Copy icon if available
+
+def _copy_icon_file(jar_file: Path, usr_dir: Path, app_name: str) -> None:
+    """Copy icon file if available."""
     icon_paths = [
         jar_file.parent / f"{app_name.lower()}.png",
         jar_file.parent / "sqlworkbench.png",
     ]
 
-    icon_copied = False
     for icon_path in icon_paths:
         if icon_path.exists():
             icons_dir = usr_dir / "share" / "icons"
             icons_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy2(icon_path, icons_dir / f"{app_name.lower()}.png")
             print(f"🖼️  Copied icon: {icon_path}")
-            icon_copied = True
-            break
+            return
 
-    if not icon_copied:
-        print("⚠️  No icon found")
+    print("⚠️  No icon found")
 
-    # Step 8: Create final AppImage
-    if Path("./appimagetool").exists():
-        print("🔧 Creating final AppImage...")
-        try:
-            result = subprocess.run(
-                ["./appimagetool", "--no-appstream", str(app_dir)],
-                capture_output=True,
-                text=True,
-                cwd=output_dir,
-            )
 
-            if result.returncode == 0:
-                final_appimage = output_dir / f"{app_name}-Bundled.AppImage"
-                if final_appimage.exists():
-                    size_mb = final_appimage.stat().st_size // (1024 * 1024)
-                    print(f"✅ Bundled AppImage created: {final_appimage}")
-                    print(f"📦 Size: {size_mb} MB")
-                    print("☕ Contains: OpenJDK 11 (portable)")
-                    print(f"🚀 Run with: ./{Path(final_appimage).name}")
-                    return str(final_appimage)
-            else:
-                print(f"❌ AppImage creation failed: {result.stderr}")
-        except Exception as e:
-            print(f"❌ Error running appimagetool: {e}")
-    else:
+def _finalize_appimage(app_dir: Path, app_name: str, output_dir: Path) -> str | None:
+    """Create final AppImage using appimagetool."""
+    if not Path("./appimagetool").exists():
         print("⚠️  appimagetool not found")
         print(f"📦 AppImage directory created: {app_dir}")
         print(f"🔧 To create final AppImage: ./appimagetool {app_dir}")
         return str(app_dir)
 
-    return None
+    print("🔧 Creating final AppImage...")
+    try:
+        result = subprocess.run(
+            ["./appimagetool", "--no-appstream", str(app_dir)],
+            capture_output=True,
+            text=True,
+            cwd=output_dir,
+        )
+
+        if result.returncode != 0:
+            print(f"❌ AppImage creation failed: {result.stderr}")
+            return None
+
+        final_appimage = output_dir / f"{app_name}-Bundled.AppImage"
+        if not final_appimage.exists():
+            return None
+
+        size_mb = final_appimage.stat().st_size // (1024 * 1024)
+        print(f"✅ Bundled AppImage created: {final_appimage}")
+        print(f"📦 Size: {size_mb} MB")
+        print("☕ Contains: OpenJDK 11 (portable)")
+        print(f"🚀 Run with: ./{Path(final_appimage).name}")
+        return str(final_appimage)
+    except Exception as e:
+        print(f"❌ Error running appimagetool: {e}")
+        return None
+
+
+def create_bundled_appimage(jar_file, app_name="SQLWorkbench", output_dir="."):
+    """Create AppImage with bundled Java"""
+
+    jar_file = Path(jar_file)
+    if not jar_file.exists():
+        print(f"❌ JAR file not found: {jar_file}")
+        return None
+
+    output_dir = Path(output_dir)
+    app_dir = output_dir / f"{app_name}-Bundled.AppImage"
+
+    print(f"🚀 Creating bundled AppImage for {app_name}...")
+
+    # Clean up any existing AppImage
+    if app_dir.exists():
+        shutil.rmtree(app_dir)
+
+    # Create AppImage structure
+    app_dir.mkdir(parents=True)
+    usr_dir = app_dir / "usr"
+    usr_bin_dir = usr_dir / "bin"
+    usr_lib_dir = usr_dir / "lib"
+    usr_java_dir = usr_dir / "java"
+    usr_share_dir = usr_dir / "share"
+    usr_share_app_dir = usr_share_dir / "applications"
+
+    for dir_path in [
+        usr_bin_dir,
+        usr_lib_dir,
+        usr_java_dir,
+        usr_share_dir,
+        usr_share_app_dir,
+    ]:
+        dir_path.mkdir(parents=True, exist_ok=True)
+
+    # Copy JAR file
+    _copy_jar_file(jar_file, usr_bin_dir, app_name)
+
+    # Download and bundle Java
+    jdk_archive = download_openjdk("11", output_dir)
+    if not jdk_archive or not _bundle_java(jdk_archive, usr_java_dir, output_dir):
+        print("❌ Failed to download OpenJDK")
+        return None
+
+    # Copy dependencies and create supporting files
+    _copy_dependencies(jar_file, usr_lib_dir)
+    _create_apprun_script(app_dir, app_name)
+    _create_desktop_file(app_name, usr_share_app_dir)
+    _copy_icon_file(jar_file, usr_dir, app_name)
+
+    # Create final AppImage
+    return _finalize_appimage(app_dir, app_name, output_dir)
 
 
 if __name__ == "__main__":

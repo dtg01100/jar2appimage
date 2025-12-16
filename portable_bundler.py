@@ -30,65 +30,9 @@ def get_system_architecture():
     return arch_map.get(machine, "x86_64")  # Default to x86_64
 
 
-def create_portable_appimage(  # noqa: C901
-    jar_file, app_name="SQLWorkbench", output_dir=".", arch=None
-):
-    """Create a portable AppImage that uses bundled Java or system Java"""
-
-    jar_file = Path(jar_file)
-    if not jar_file.exists():
-        print(f"❌ JAR file not found: {jar_file}")
-        return None
-
-    output_dir = Path(output_dir)
-    app_dir_name = f"{app_name.replace(' ', '-').lower()}-portable"
-    app_dir = output_dir / f"{app_dir_name}.AppImage"
-
-    print(f"🚀 Creating portable AppImage for {app_name}...")
-
-    # Clean up any existing AppImage
-    if app_dir.exists():
-        shutil.rmtree(app_dir)
-
-    # Create AppImage structure
-    app_dir.mkdir(parents=True)
-    usr_dir = app_dir / "usr"
-    usr_bin_dir = usr_dir / "bin"
-    usr_lib_dir = usr_dir / "lib"
-    usr_java_dir = usr_dir / "java"
-    usr_share_dir = usr_dir / "share"
-    usr_share_app_dir = usr_share_dir / "applications"
-
-    for dir_path in [
-        usr_bin_dir,
-        usr_lib_dir,
-        usr_java_dir,
-        usr_share_dir,
-        usr_share_app_dir,
-    ]:
-        dir_path.mkdir(parents=True, exist_ok=True)
-
-    # Step 1: Copy JAR file
-    dest_jar = usr_bin_dir / f"{app_name.lower()}.jar"
-    shutil.copy2(jar_file, dest_jar)
-    print(f"📦 Copied JAR: {dest_jar}")
-
-    # Step 2: Copy dependencies if available
-    if jar_file.parent.name == "test_jars":
-        # Copy common JAR dependencies
-        for dep_name in ["commons-cli-1.5.0.jar", "commons-lang3-3.12.0.jar"]:
-            src = jar_file.parent / dep_name
-            if src.exists():
-                dst = usr_lib_dir / dep_name
-                shutil.copy2(src, dst)
-                print(f"📦 Copied dependency: {dep_name}")
-
-    # Step 3: Try to use system Java first, with fallback to bundled placeholder
-    # (In real implementation, this would download and bundle Java)
-
-    # Step 4: Create smart AppRun script that prioritizes bundled Java
-    jar_name = app_name.lower()
-    apprun_content = f"""#!/bin/sh
+def _create_portable_apprun(jar_name: str) -> str:
+    """Create AppRun script with fallback to system Java."""
+    return f"""#!/bin/sh
 HERE="$(dirname "$(readlink -f "$0")")"
 
 # Get JAR file path
@@ -151,13 +95,46 @@ fi
 exec "$JAVA_CMD" -cp "$CLASSPATH" workbench.sql.Workbench "$@"
 """
 
-    apprun_path = app_dir / "AppRun"
-    with open(apprun_path, "w") as f:
-        f.write(apprun_content)
-    apprun_path.chmod(0o755)
-    print(f"📝 Created smart AppRun: {apprun_path}")
 
-    # Step 5: Create desktop file
+def _setup_directories(app_dir: Path) -> tuple:
+    """Create and return the directory structure."""
+    app_dir.mkdir(parents=True)
+    usr_dir = app_dir / "usr"
+    usr_bin_dir = usr_dir / "bin"
+    usr_lib_dir = usr_dir / "lib"
+    usr_java_dir = usr_dir / "java"
+    usr_share_dir = usr_dir / "share"
+    usr_share_app_dir = usr_share_dir / "applications"
+
+    for dir_path in [
+        usr_bin_dir,
+        usr_lib_dir,
+        usr_java_dir,
+        usr_share_dir,
+        usr_share_app_dir,
+    ]:
+        dir_path.mkdir(parents=True, exist_ok=True)
+
+    return usr_dir, usr_bin_dir, usr_lib_dir, usr_java_dir, usr_share_dir, usr_share_app_dir
+
+
+def _copy_jar_and_deps(jar_file: Path, usr_bin_dir: Path, usr_lib_dir: Path, app_name: str) -> None:
+    """Copy JAR file and dependencies."""
+    dest_jar = usr_bin_dir / f"{app_name.lower()}.jar"
+    shutil.copy2(jar_file, dest_jar)
+    print(f"📦 Copied JAR: {dest_jar}")
+
+    if jar_file.parent.name == "test_jars":
+        for dep_name in ["commons-cli-1.5.0.jar", "commons-lang3-3.12.0.jar"]:
+            src = jar_file.parent / dep_name
+            if src.exists():
+                dst = usr_lib_dir / dep_name
+                shutil.copy2(src, dst)
+                print(f"📦 Copied dependency: {dep_name}")
+
+
+def _create_desktop_files(app_dir: Path, app_dir_name: str, app_name: str, usr_share_app_dir: Path) -> None:
+    """Create desktop files for AppImage."""
     desktop_content = f"""[Desktop Entry]
 Type=Application
 Name={app_name}
@@ -168,51 +145,45 @@ Categories=Development;Database;
 Terminal=false
 StartupNotify=true
 """
-
-    # Create desktop file at root (appimagetool looks for it here)
     root_desktop_path = app_dir / f"{app_dir_name}.desktop"
     with open(root_desktop_path, "w") as f:
         f.write(desktop_content)
     print(f"📝 Created root desktop file: {root_desktop_path}")
 
-    # Also create in usr/share/applications
     desktop_path = usr_share_app_dir / f"{app_dir_name}.desktop"
     with open(desktop_path, "w") as f:
         f.write(desktop_content)
     print(f"📝 Created usr desktop file: {desktop_path}")
 
-    # Step 6: Copy icon if available
+
+def _copy_or_create_icon(jar_file: Path, app_dir: Path, app_dir_name: str, usr_dir: Path) -> None:
+    """Copy icon or create minimal one."""
     icon_paths = [
-        jar_file.parent / f"{app_name.lower()}.png",
+        jar_file.parent / f"{app_dir_name.replace('-', '')}.png",
         jar_file.parent / "sqlworkbench.png",
     ]
 
-    icon_copied = False
     for icon_path in icon_paths:
         if icon_path.exists():
-            # Copy icon to root of AppDir (appimagetool expects it here)
             root_icon_path = app_dir / f"{app_dir_name}.png"
             shutil.copy2(icon_path, root_icon_path)
             print(f"🖼️  Copied icon to root: {root_icon_path}")
-
-            # Also copy to icons directory
             icons_dir = usr_dir / "share" / "icons"
             icons_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy2(icon_path, icons_dir / f"{app_dir_name}.png")
-            icon_copied = True
-            break
+            return
 
-    if not icon_copied:
-        # Create minimal icon in root
-        root_icon_path = app_dir / f"{app_dir_name}.png"
-        with open(root_icon_path, "wb") as f:
-            # Minimal 1x1 transparent PNG
-            f.write(
-                b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xdb\x00\x00\x00\x00IEND\xaeB`\x82"
-            )
-        print(f"🖼️  Created minimal icon: {root_icon_path}")
+    # Create minimal icon
+    root_icon_path = app_dir / f"{app_dir_name}.png"
+    with open(root_icon_path, "wb") as f:
+        f.write(
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xdb\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+    print(f"🖼️  Created minimal icon: {root_icon_path}")
 
-    # Step 7: Create bundled Java placeholder directory
+
+def _create_java_readme(usr_java_dir: Path, app_name: str) -> None:
+    """Create Java bundling instructions."""
     java_placeholder = usr_java_dir / "README.md"
     with open(java_placeholder, "w") as f:
         f.write(f"""# Java Bundling for {app_name}
@@ -236,65 +207,101 @@ This AppImage is designed to be portable with bundled Java runtime.
 - Platform-specific Look & Feel
 - Desktop module access permissions
 """)
-
     print(f"📝 Created Java bundling instructions: {java_placeholder}")
 
-    # Step 8: Create final AppImage
-    if Path("./appimagetool").exists():
-        # Determine architecture
-        if arch is None:
-            arch = get_system_architecture()
-        print(f"🔧 Creating final AppImage for {arch}...")
 
-        try:
-            env = os.environ.copy()
-            env["ARCH"] = arch
-
-            result = subprocess.run(
-                ["./appimagetool", "--no-appstream", str(app_dir)],
-                capture_output=True,
-                text=True,
-                cwd=output_dir,
-                env=env,
-            )
-
-            if result.returncode == 0:
-                # appimagetool creates AppImage with the desktop file name
-                # Check for the most likely names
-                possible_names = [
-                    f"{app_name}-x86_64.AppImage",
-                    f"{app_dir_name}-x86_64.AppImage",
-                    f"{app_name}.AppImage",
-                    f"{app_dir_name}.AppImage",
-                ]
-
-                final_appimage = None
-                for name in possible_names:
-                    candidate = output_dir / name
-                    if candidate.exists():
-                        final_appimage = candidate
-                        break
-
-                if final_appimage and final_appimage.exists():
-                    size_mb = final_appimage.stat().st_size // (1024 * 1024)
-                    print(f"✅ Portable AppImage created: {final_appimage}")
-                    print(f"📦 Size: {size_mb} MB")
-                    print(
-                        "☕ Java: Smart bundling system (uses system Java, ready for bundled)"
-                    )
-                    print("📱 Features: Portable + Desktop Integration")
-                    return str(final_appimage)
-            else:
-                print(f"❌ AppImage creation failed: {result.stderr}")
-        except Exception as e:
-            print(f"❌ Error running appimagetool: {e}")
-    else:
+def _build_appimage(app_dir: Path, app_dir_name: str, arch: str | None, output_dir: Path) -> str | None:
+    """Build final AppImage."""
+    if not Path("./appimagetool").exists():
         print("⚠️  appimagetool not found")
         print(f"📦 AppImage directory created: {app_dir}")
         print(f"🔧 To create final AppImage: ./appimagetool {app_dir}")
         return str(app_dir)
 
-    return None
+    if arch is None:
+        arch = get_system_architecture()
+    print(f"🔧 Creating final AppImage for {arch}...")
+
+    try:
+        env = os.environ.copy()
+        env["ARCH"] = arch
+        result = subprocess.run(
+            ["./appimagetool", "--no-appstream", str(app_dir)],
+            capture_output=True,
+            text=True,
+            cwd=output_dir,
+            env=env,
+        )
+
+        if result.returncode != 0:
+            print(f"❌ AppImage creation failed: {result.stderr}")
+            return None
+
+        possible_names = [
+            f"{app_dir_name}-x86_64.AppImage",
+            f"{app_dir_name}.AppImage",
+        ]
+
+        for name in possible_names:
+            candidate = output_dir / name
+            if candidate.exists():
+                size_mb = candidate.stat().st_size // (1024 * 1024)
+                print(f"✅ Portable AppImage created: {candidate}")
+                print(f"📦 Size: {size_mb} MB")
+                print("☕ Java: Smart bundling system (uses system Java, ready for bundled)")
+                print("📱 Features: Portable + Desktop Integration")
+                return str(candidate)
+
+        return None
+    except Exception as e:
+        print(f"❌ Error running appimagetool: {e}")
+        return None
+
+
+def create_portable_appimage(
+    jar_file, app_name="SQLWorkbench", output_dir=".", arch=None
+):
+    """Create a portable AppImage that uses bundled Java or system Java"""
+
+    jar_file = Path(jar_file)
+    if not jar_file.exists():
+        print(f"❌ JAR file not found: {jar_file}")
+        return None
+
+    output_dir = Path(output_dir)
+    app_dir_name = f"{app_name.replace(' ', '-').lower()}-portable"
+    app_dir = output_dir / f"{app_dir_name}.AppImage"
+
+    print(f"🚀 Creating portable AppImage for {app_name}...")
+
+    if app_dir.exists():
+        shutil.rmtree(app_dir)
+
+    # Setup directories
+    usr_dir, usr_bin_dir, usr_lib_dir, usr_java_dir, usr_share_dir, usr_share_app_dir = _setup_directories(app_dir)
+
+    # Copy JAR and dependencies
+    _copy_jar_and_deps(jar_file, usr_bin_dir, usr_lib_dir, app_name)
+
+    # Create AppRun script
+    apprun_content = _create_portable_apprun(app_name.lower())
+    apprun_path = app_dir / "AppRun"
+    with open(apprun_path, "w") as f:
+        f.write(apprun_content)
+    apprun_path.chmod(0o755)
+    print(f"📝 Created smart AppRun: {apprun_path}")
+
+    # Create desktop files
+    _create_desktop_files(app_dir, app_dir_name, app_name, usr_share_app_dir)
+
+    # Handle icon
+    _copy_or_create_icon(jar_file, app_dir, app_dir_name, usr_dir)
+
+    # Create Java readme
+    _create_java_readme(usr_java_dir, app_name)
+
+    # Build final AppImage
+    return _build_appimage(app_dir, app_dir_name, arch, output_dir)
 
 
 if __name__ == "__main__":
