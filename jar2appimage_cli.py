@@ -88,7 +88,7 @@ def auto_download_java(output_dir: str = ".", java_version: str = None):
         return None
 
 
-def main():
+def main():  # noqa: C901
     parser = argparse.ArgumentParser(
         description="Create AppImages from JAR files (Linux only)",
         formatter_class=argparse.RawDescriptionHelpFormatter,

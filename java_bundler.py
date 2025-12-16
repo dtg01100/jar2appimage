@@ -166,7 +166,7 @@ exec "$JAVA_HOME/bin/java" -jar "$(dirname "$0")/{app_name_clean}.jar" "$@"
 def main():
     # Setup logging for CLI mode
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
-    
+
     if len(sys.argv) < 4:
         print("Usage: python3 java_bundler.py <jar_file> <app_name> [output_dir]")
         sys.exit(1)
@@ -187,7 +187,7 @@ def main():
     # Download OpenJDK
     bundler = JavaBundler()
     bundled_app_path = bundler.download_opensdk(output_dir)
-    
+
     if not bundled_app_path:
         print("❌ Failed to download OpenJDK")
         sys.exit(1)

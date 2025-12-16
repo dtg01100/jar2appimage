@@ -8,7 +8,7 @@ import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -16,20 +16,20 @@ logger = logging.getLogger(__name__)
 def should_use_parallelism(item_count: int, operation_cost: str = "low") -> bool:
     """
     Determine if parallelism is beneficial based on item count and operation cost.
-    
+
     Args:
         item_count: Number of items to process
         operation_cost: "low", "medium", or "high" - estimated CPU/IO cost per operation
-    
+
     Returns:
         True if parallelism should be used, False otherwise
     """
     thresholds = {
         "low": 10,     # File copying, simple validation
-        "medium": 5,   # JAR analysis, dependency checking  
+        "medium": 5,   # JAR analysis, dependency checking
         "high": 2      # Java downloads, AppImage creation
     }
-    
+
     return item_count >= thresholds.get(operation_cost, 5)
 
 
@@ -42,39 +42,39 @@ def process_items_parallel(
 ) -> Dict[str, Any]:
     """
     Unified parallel processing function that eliminates repetitive patterns.
-    
+
     Args:
         items: List of items to process
         processor_func: Function that processes a single item
         operation_name: Name for logging and reporting
         operation_cost: Estimated cost per operation ("low", "medium", "high")
         max_workers: Maximum worker threads
-    
+
     Returns:
         Dict with results and statistics
     """
     if not items:
         return {"total": 0, "successful": 0, "failed": 0, "results": []}
-    
+
     # Determine if parallelism is beneficial
     use_parallel = should_use_parallelism(len(items), operation_cost)
-    
+
     if not use_parallel:
         # Process synchronously for small/simple operations
         logger.info(f"Processing {len(items)} {operation_name} items synchronously")
         return _process_items_sync(items, processor_func, operation_name)
-    
+
     # Process in parallel for larger operations
     max_workers = max_workers or min(32, (os.cpu_count() or 1) + 4)
     logger.info(f"Processing {len(items)} {operation_name} items in parallel with {max_workers} workers")
-    
+
     results = []
     successful = 0
-    
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submit all tasks
         future_to_item = {executor.submit(processor_func, item): item for item in items}
-        
+
         # Collect results as they complete
         for future in as_completed(future_to_item):
             try:
@@ -89,10 +89,10 @@ def process_items_parallel(
                     "error": str(e),
                     "item": future_to_item[future]
                 })
-    
+
     failed = len(results) - successful
     logger.info(f"{operation_name} completed: {successful} successful, {failed} failed")
-    
+
     return {
         "total": len(items),
         "successful": successful,
@@ -109,7 +109,7 @@ def _process_items_sync(
     """Process items synchronously."""
     results = []
     successful = 0
-    
+
     for i, item in enumerate(items, 1):
         try:
             result = processor_func(item)
@@ -123,7 +123,7 @@ def _process_items_sync(
                 "error": str(e),
                 "item": item
             })
-    
+
     failed = len(results) - successful
     return {
         "total": len(items),
@@ -141,10 +141,10 @@ def copy_file_operation(src_dest_tuple: tuple) -> Dict[str, Any]:
     try:
         dest_path = Path(dest)
         dest_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         import shutil
         shutil.copy2(src, dest)
-        
+
         return {
             "success": True,
             "src": src,
@@ -166,7 +166,7 @@ def analyze_jar_operation(jar_path: str) -> Dict[str, Any]:
         jar_file = Path(jar_path)
         if not jar_file.exists():
             return {"jar_path": jar_path, "success": False, "error": "File not found"}
-        
+
         # Real JAR analysis - extract basic information
         import zipfile
         analysis = {
@@ -175,14 +175,14 @@ def analyze_jar_operation(jar_path: str) -> Dict[str, Any]:
             "main_class": None,
             "manifest_info": {},
         }
-        
+
         with zipfile.ZipFile(jar_path, "r") as zf:
             # Check for manifest
             if "META-INF/MANIFEST.MF" in zf.namelist():
                 try:
                     manifest_content = zf.read("META-INF/MANIFEST.MF").decode("utf-8", errors="ignore")
                     analysis["manifest_info"]["has_manifest"] = True
-                    
+
                     for line in manifest_content.split("\n"):
                         if line.startswith("Main-Class:"):
                             analysis["main_class"] = line.split(":", 1)[1].strip()
@@ -191,12 +191,12 @@ def analyze_jar_operation(jar_path: str) -> Dict[str, Any]:
                     analysis["manifest_info"]["has_manifest"] = False
             else:
                 analysis["manifest_info"]["has_manifest"] = False
-            
+
             # Count entries as a basic dependency indicator
             analysis["dependencies_found"] = len([name for name in zf.namelist() if name.endswith('.jar')])
-        
+
         return {"jar_path": jar_path, "success": True, "analysis": analysis}
-        
+
     except Exception as e:
         return {"jar_path": jar_path, "success": False, "error": str(e)}
 
@@ -205,7 +205,7 @@ def validate_jar_operation(jar_path: str) -> Dict[str, Any]:
     """Validate a single JAR file."""
     try:
         jar_file = Path(jar_path)
-        
+
         # Basic validation checks
         validation = {
             "exists": jar_file.exists(),
@@ -213,7 +213,7 @@ def validate_jar_operation(jar_path: str) -> Dict[str, Any]:
             "is_jar": jar_path.lower().endswith(".jar"),
             "has_size": jar_file.stat().st_size > 0 if jar_file.exists() else False,
         }
-        
+
         # Try to validate JAR structure
         if validation["exists"] and validation["is_jar"]:
             try:
@@ -226,17 +226,17 @@ def validate_jar_operation(jar_path: str) -> Dict[str, Any]:
                 validation["zip_structure_valid"] = False
         else:
             validation["zip_structure_valid"] = False
-        
+
         validation["overall_valid"] = all([
             validation["exists"],
-            validation["readable"], 
+            validation["readable"],
             validation["is_jar"],
             validation["has_size"],
             validation.get("zip_structure_valid", False)
         ])
-        
+
         return {"jar_path": jar_path, "success": True, "validation": validation}
-        
+
     except Exception as e:
         return {"jar_path": jar_path, "success": False, "error": str(e)}
 
@@ -245,10 +245,10 @@ def validate_appimage_operation(appimage_path: str) -> Dict[str, Any]:
     """Validate a single AppImage file."""
     try:
         appimage_file = Path(appimage_path)
-        
+
         if not appimage_file.exists():
             return {"appimage_path": appimage_path, "success": False, "error": "File not found"}
-        
+
         # Basic file validation
         file_validation = {
             "exists": True,
@@ -256,7 +256,7 @@ def validate_appimage_operation(appimage_path: str) -> Dict[str, Any]:
             "has_executable_extension": appimage_path.lower().endswith(('.appimage', '.AppImage')),
             "size": appimage_file.stat().st_size,
         }
-        
+
         # Basic AppImage structure validation
         try:
             with open(appimage_path, "rb") as f:
@@ -264,7 +264,7 @@ def validate_appimage_operation(appimage_path: str) -> Dict[str, Any]:
                 file_validation["elf_header_valid"] = header.startswith(b'\x7fELF')
         except Exception:
             file_validation["elf_header_valid"] = False
-        
+
         # Overall validation status
         file_validation["overall_valid"] = all([
             file_validation["exists"],
@@ -272,16 +272,16 @@ def validate_appimage_operation(appimage_path: str) -> Dict[str, Any]:
             file_validation["has_executable_extension"],
             file_validation["elf_header_valid"]
         ])
-        
+
         status = "passed" if file_validation["overall_valid"] else "failed"
-        
+
         return {
             "appimage_path": appimage_path,
             "success": True,
             "file_validation": file_validation,
             "overall_status": status,
         }
-        
+
     except Exception as e:
         return {"appimage_path": appimage_path, "success": False, "error": str(e)}
 
@@ -289,11 +289,11 @@ def validate_appimage_operation(appimage_path: str) -> Dict[str, Any]:
 # Main processor class with unified interface
 class ParallelProcessor:
     """Simplified parallel processor with unified interface."""
-    
+
     def __init__(self, max_workers: Optional[int] = None):
         self.max_workers = max_workers
-        logger.info(f"ParallelProcessor initialized")
-    
+        logger.info("ParallelProcessor initialized")
+
     def parallel_file_copy(self, file_operations: List[tuple]) -> Dict[str, Any]:
         """Copy multiple files in parallel using unified processing."""
         return process_items_parallel(
@@ -303,27 +303,27 @@ class ParallelProcessor:
             operation_cost="low",
             max_workers=self.max_workers
         )
-    
+
     def parallel_dependency_analysis(self, jar_files: List[str]) -> Dict[str, Any]:
         """Analyze multiple JAR files in parallel."""
         return process_items_parallel(
             items=jar_files,
             processor_func=analyze_jar_operation,
-            operation_name="JAR analysis", 
+            operation_name="JAR analysis",
             operation_cost="medium",
             max_workers=self.max_workers
         )
-    
+
     def parallel_jar_validation(self, jar_files: List[str]) -> Dict[str, Any]:
         """Validate multiple JAR files in parallel."""
         return process_items_parallel(
             items=jar_files,
             processor_func=validate_jar_operation,
             operation_name="JAR validation",
-            operation_cost="low", 
+            operation_cost="low",
             max_workers=self.max_workers
         )
-    
+
     def parallel_appimage_validation(self, appimage_paths: List[str]) -> Dict[str, Any]:
         """Validate multiple AppImages in parallel."""
         return process_items_parallel(
@@ -333,16 +333,16 @@ class ParallelProcessor:
             operation_cost="medium",
             max_workers=self.max_workers
         )
-    
+
     def execute_parallel_tasks(
-        self, 
-        task_functions: List[Callable], 
+        self,
+        task_functions: List[Callable],
         task_args: List[tuple]
     ) -> List[Any]:
         """Execute multiple different tasks in parallel."""
         if len(task_functions) != len(task_args):
             raise ValueError("task_functions and task_args must have same length")
-        
+
         def execute_task_wrapper(args):
             func, arg_tuple = args
             try:
@@ -357,7 +357,7 @@ class ParallelProcessor:
                     "error": str(e),
                     "task_name": func.__name__,
                 }
-        
+
         combined_tasks = list(zip(task_functions, task_args))
         results = process_items_parallel(
             items=combined_tasks,
@@ -366,7 +366,7 @@ class ParallelProcessor:
             operation_cost="high",
             max_workers=self.max_workers
         )
-        
+
         return results["results"]
 
 
@@ -392,16 +392,16 @@ def parallel_appimage_validation(appimage_paths: List[str], max_workers: Optiona
 if __name__ == "__main__":
     # Setup logging for CLI mode
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
-    
+
     # Example usage
     processor = ParallelProcessor()
-    
+
     # Test file operations
     file_ops = [
         ("/tmp/test1.txt", "/tmp/copy1.txt"),
         ("/tmp/test2.txt", "/tmp/copy2.txt"),
     ]
-    
+
     print("Testing parallel file operations...")
     result = processor.parallel_file_copy(file_ops)
     print(f"Result: {result['successful']}/{result['total']} successful")

@@ -30,7 +30,7 @@ def get_system_architecture():
     return arch_map.get(machine, "x86_64")  # Default to x86_64
 
 
-def create_portable_appimage(
+def create_portable_appimage(  # noqa: C901
     jar_file, app_name="SQLWorkbench", output_dir=".", arch=None
 ):
     """Create a portable AppImage that uses bundled Java or system Java"""

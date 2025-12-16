@@ -115,7 +115,7 @@ class JavaBundler:
 
         # Create tarball
         bundle_filename = f"{app_name_clean}-bundled.tar.gz"
-        bundle_path = os.path.join(output_dir, bundle_filename)
+        bundle_path = os.path.join(self.output_dir, bundle_filename)
 
         try:
             with tarfile.open(bundle_path, "w:gz") as tar:
@@ -214,10 +214,6 @@ class JavaBundler:
 
     def _create_appimage_file(self, appimage_dir: str, app_name: str) -> str:
         """Create final AppImage file"""
-        appimage_output_dir = self.output_dir  # Reference to self for scope
-        appimage_path: str = os.path.join(appimage_output_dir, f"{app_name}.AppImage")
-
-
         # Create enhanced AppRun script with smart terminal detection
         self._needs_terminal()
 

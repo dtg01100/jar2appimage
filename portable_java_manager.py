@@ -304,12 +304,12 @@ class PortableJavaManager:
         major_version = int(version_info["major"])
 
         # Minimum Java version for jar2appimage
-        MIN_JAVA_VERSION = 8
+        min_java_version = 8
 
         # Maximum tested version (to avoid cutting-edge issues)
-        MAX_JAVA_VERSION = 21
+        max_java_version = 21
 
-        return MIN_JAVA_VERSION <= major_version <= MAX_JAVA_VERSION
+        return min_java_version <= major_version <= max_java_version
 
     def analyze_jar_requirements(self, jar_path: str) -> Dict[str, Any]:
         """

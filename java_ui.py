@@ -22,40 +22,40 @@ class JavaUserInterface:
     """
     Handles all user interaction and prompt handling for Java operations
     """
-    
+
     def __init__(self, interactive_mode: bool = True):
         """
         Initialize the Java UI handler
-        
+
         Args:
             interactive_mode: Whether to use interactive prompts
         """
         self.interactive_mode = interactive_mode
         self._setup_logging()
-    
+
     def _setup_logging(self) -> None:
         """Setup logging for UI operations"""
         if not logger.handlers:
             logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
-    
+
     def offer_portable_java(
-        self, 
-        download_needed: bool, 
-        reason: str, 
+        self,
+        download_needed: bool,
+        reason: str,
         java_version: str,
         download_info: Dict[str, Any],
         current_platform: Dict[str, str]
     ) -> bool:
         """
         Offer to download portable Java with user consent
-        
+
         Args:
             download_needed: Whether download is needed
             reason: Reason for download
             java_version: Java version to download
             download_info: Download information dictionary
             current_platform: Current platform information
-            
+
         Returns:
             True if user consents to download
         """
@@ -71,20 +71,20 @@ class JavaUserInterface:
 
         # Display the download offer interface
         self._show_download_offer(java_version, reason, download_info, current_platform)
-        
+
         # Handle user consent
         return self._get_user_consent(java_version, download_info)
-    
+
     def _show_download_offer(
-        self, 
-        java_version: str, 
-        reason: str, 
+        self,
+        java_version: str,
+        reason: str,
         download_info: Dict[str, Any],
         current_platform: Dict[str, str]
     ) -> None:
         """
         Display the download offer interface
-        
+
         Args:
             java_version: Java version to download
             reason: Reason for download
@@ -116,15 +116,15 @@ class JavaUserInterface:
         print(f"   • Java {java_version} runtime files")
         print(f"   • Stored in: {download_info.get('cache_dir', 'cache directory')}")
         print("   • Used for creating portable AppImages")
-    
+
     def _get_user_consent(self, java_version: str, download_info: Dict[str, Any]) -> bool:
         """
         Get user consent for download
-        
+
         Args:
             java_version: Java version to download
             download_info: Download information
-            
+
         Returns:
             True if user consents
         """
@@ -142,11 +142,11 @@ class JavaUserInterface:
                 self._show_detailed_download_info(java_version, download_info)
             else:
                 print("   Please enter Y, N, or I")
-    
+
     def _show_detailed_download_info(self, java_version: str, download_info: Dict[str, Any]) -> None:
         """
         Show detailed download information
-        
+
         Args:
             java_version: Java version
             download_info: Download information dictionary
@@ -169,11 +169,11 @@ class JavaUserInterface:
         print("   • Downloaded files cached locally")
         print("   • Reused for future AppImages")
         print("   • Can be cleared with --clear-cache")
-    
+
     def show_java_detection_result(self, java_info: Optional[Dict[str, Any]]) -> None:
         """
         Display Java detection results
-        
+
         Args:
             java_info: Java information dictionary or None if not found
         """
@@ -185,11 +185,11 @@ class JavaUserInterface:
                 print(f"   JAVA_HOME: {java_info['java_home']}")
         else:
             print("❌ No compatible Java found")
-    
+
     def show_jar_analysis_results(self, jar_path: str, jar_requirements: Dict[str, Any]) -> None:
         """
         Display JAR analysis results
-        
+
         Args:
             jar_path: Path to JAR file
             jar_requirements: JAR requirements analysis
@@ -197,11 +197,11 @@ class JavaUserInterface:
         print(f"📋 JAR Analysis for {jar_path}:")
         print(f"   Main Class: {jar_requirements.get('main_class', 'Not specified')}")
         print(f"   Requires Modules: {jar_requirements.get('requires_modules', False)}")
-    
+
     def show_cache_info(self, cache_info: Dict[str, Any]) -> None:
         """
         Display cache information
-        
+
         Args:
             cache_info: Cache information dictionary
         """
@@ -210,11 +210,11 @@ class JavaUserInterface:
         print(f"   Total Files: {cache_info['total_files']}")
         print(f"   Total Size: {cache_info['total_size_mb']} MB")
         print(f"   Java Versions: {', '.join(cache_info['java_versions'])}")
-    
+
     def show_detection_summary(self, summary: Dict[str, Any]) -> None:
         """
         Display Java detection summary
-        
+
         Args:
             summary: Detection summary dictionary
         """
@@ -223,11 +223,11 @@ class JavaUserInterface:
         print(f"   Latest LTS: {summary['latest_lts']}")
         print(f"   Platform: {summary['platform']['system']} {summary['platform']['arch']}")
         print(f"   Cache: {summary['cache_info']['total_files']} files, {summary['cache_info']['total_size_mb']} MB")
-    
+
     def show_download_progress(self, java_version: str, downloaded_file: str) -> None:
         """
         Show download progress message
-        
+
         Args:
             java_version: Java version being downloaded
             downloaded_file: Path to downloaded file
@@ -237,11 +237,11 @@ class JavaUserInterface:
             print(f"✅ Downloaded: {downloaded_file}")
         else:
             print("❌ Download failed")
-    
+
     def show_operation_status(self, operation: str, success: bool, details: str = "") -> None:
         """
         Show operation status message
-        
+
         Args:
             operation: Operation name
             success: Whether operation was successful

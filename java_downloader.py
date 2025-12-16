@@ -19,7 +19,7 @@ import tarfile
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -28,19 +28,19 @@ class JavaDownloader:
     """
     Handles Java downloading, extraction, and integration operations
     """
-    
+
     # LTS Java versions (as of 2025-12-16)
     LTS_VERSIONS = ["8", "11", "17", "21"]
     CURRENT_LTS = "21"  # Latest LTS as of current date
-    
+
     # Architecture mapping
     ARCH_MAPPING = {
         "x86_64": "x64",
-        "amd64": "x64", 
+        "amd64": "x64",
         "aarch64": "aarch64",
         "arm64": "aarch64"
     }
-    
+
     # Fallback download URLs for manual downloads
     FALLBACK_URLS = {
         "8": "https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u412-b08/OpenJDK8U-jre_x64_linux_hotspot_8u412b08.tar.gz",
@@ -48,26 +48,26 @@ class JavaDownloader:
         "17": "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.12%2B7/OpenJDK17U-jre_x64_linux_hotspot_17.0.12_7.tar.gz",
         "21": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.4%2B7/OpenJDK21U-jre_x64_linux_hotspot_21.0.4_7.tar.gz",
     }
-    
+
     def __init__(self, download_cache: Path):
         """
         Initialize the Java downloader
-        
+
         Args:
             download_cache: Directory for caching downloads
         """
         self.download_cache = download_cache
         self.download_cache.mkdir(parents=True, exist_ok=True)
-        
+
         logger.info(f"Initialized JavaDownloader with cache: {self.download_cache}")
-    
+
     def get_latest_lts_version(self, force_update: bool = False) -> str:
         """
         Get the latest LTS Java version
-        
+
         Args:
             force_update: Force API check instead of using cached value
-            
+
         Returns:
             Latest LTS version string
         """
@@ -89,11 +89,11 @@ class JavaDownloader:
         # Fallback to hardcoded current LTS
         logger.info(f"📋 Using fallback LTS version: {self.CURRENT_LTS}")
         return self.CURRENT_LTS
-    
+
     def _get_latest_lts_from_api(self) -> Optional[str]:
         """
         Get latest LTS version from Adoptium API
-        
+
         Returns:
             Latest LTS version string or None if failed
         """
@@ -129,15 +129,15 @@ class JavaDownloader:
             pass
 
         return None
-    
+
     def download_portable_java(self, java_version: str, force: bool = False) -> Optional[str]:
         """
         Download portable Java runtime
-        
+
         Args:
             java_version: Java version to download
             force: Force download even if cached version exists
-            
+
         Returns:
             Path to downloaded Java archive or None if failed
         """
@@ -168,14 +168,14 @@ class JavaDownloader:
         except Exception as e:
             logger.error(f"Download failed: {e}")
             return None
-    
+
     def _get_cached_java(self, java_version: str) -> Optional[Path]:
         """
         Check for cached Java download
-        
+
         Args:
             java_version: Java version to check for
-            
+
         Returns:
             Path to cached file or None if not found
         """
@@ -184,11 +184,11 @@ class JavaDownloader:
             if cached_file.exists() and cached_file.stat().st_size > 50 * 1024 * 1024:  # At least 50MB
                 return cached_file
         return None
-    
+
     def _cache_download(self, downloaded_file: str, java_version: str) -> None:
         """
         Cache the downloaded file
-        
+
         Args:
             downloaded_file: Path to downloaded file
             java_version: Java version
@@ -204,14 +204,14 @@ class JavaDownloader:
                     logger.info(f"📦 Cached Java {java_version}: {cache_path}")
         except Exception as e:
             logger.warning(f"Failed to cache download: {e}")
-    
+
     def _fallback_download(self, java_version: str) -> Optional[str]:
         """
         Fallback download method using hardcoded URLs
-        
+
         Args:
             java_version: Java version to download
-            
+
         Returns:
             Path to downloaded file or None if failed
         """
@@ -241,15 +241,15 @@ class JavaDownloader:
             logger.error(f"Fallback download failed: {e}")
 
         return None
-    
+
     def extract_java_runtime(self, java_archive: str, extract_dir: str) -> Optional[str]:
         """
         Extract Java runtime from archive
-        
+
         Args:
             java_archive: Path to Java archive
             extract_dir: Directory to extract to
-            
+
         Returns:
             Path to extracted Java directory or None if failed
         """
@@ -291,15 +291,15 @@ class JavaDownloader:
         except Exception as e:
             logger.error(f"Extraction failed: {e}")
             return None
-    
+
     def create_portable_java_integration(self, java_dir: str, appimage_dir: str) -> bool:
         """
         Create portable Java integration for AppImage
-        
+
         Args:
             java_dir: Directory containing extracted Java
             appimage_dir: AppImage directory structure
-            
+
         Returns:
             True if successful
         """
@@ -314,15 +314,15 @@ class JavaDownloader:
         except ImportError:
             # Manual integration if SmartJavaBundler not available
             return self._manual_integration(java_dir, appimage_dir)
-    
+
     def _manual_integration(self, java_dir: str, appimage_dir: str) -> bool:
         """
         Manual Java integration for AppImage
-        
+
         Args:
             java_dir: Directory containing extracted Java
             appimage_dir: AppImage directory structure
-            
+
         Returns:
             True if successful
         """
@@ -355,15 +355,15 @@ class JavaDownloader:
         except Exception as e:
             logger.error(f"Manual integration failed: {e}")
             return False
-    
+
     def get_download_info(self, java_version: str, has_system_java: bool = False) -> Dict[str, Any]:
         """
         Get information about Java download
-        
+
         Args:
             java_version: Java version
             has_system_java: Whether system Java is available
-            
+
         Returns:
             Dictionary with download information
         """

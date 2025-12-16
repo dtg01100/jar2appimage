@@ -72,7 +72,7 @@ def extract_openjdk(jdk_path, extract_dir):
         return None
 
 
-def create_bundled_appimage(jar_file, app_name="SQLWorkbench", output_dir="."):
+def create_bundled_appimage(jar_file, app_name="SQLWorkbench", output_dir="."):  # noqa: C901
     """Create AppImage with bundled Java"""
 
     jar_file = Path(jar_file)

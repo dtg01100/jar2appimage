@@ -290,7 +290,7 @@ class ConfigManager:
         else:
             raise ValueError(f"Unsupported format: {format}")
 
-    def validate_config(self, config: Optional[AppImageConfig] = None) -> List[str]:
+    def validate_config(self, config: Optional[AppImageConfig] = None) -> List[str]:  # noqa: C901
         """Validate configuration and return list of issues"""
         config = config or self.current_config
         issues = []

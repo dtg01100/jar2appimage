@@ -292,7 +292,7 @@ class AppImageValidator:
 
         return results
 
-    def generate_validation_report(self) -> str:
+    def generate_validation_report(self) -> str:  # noqa: C901
         """Generate comprehensive validation report"""
         print("📊 Generating validation report...")
 
@@ -425,19 +425,19 @@ def validate_appimage(appimage_path: str, timeout: int = 30) -> bool:
 if __name__ == "__main__":
     # Setup logging for CLI mode
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
-    
+
     if len(sys.argv) != 2:
         print("Usage: python appimage_validator.py <path_to_appimage>")
         sys.exit(1)
 
     appimage_path = sys.argv[1]
     logger.info(f"Starting AppImage validation for: {appimage_path}")
-    
+
     success = validate_appimage(appimage_path)
-    
+
     if success:
         logger.info("AppImage validation passed successfully")
     else:
         logger.warning("AppImage validation failed")
-        
+
     sys.exit(0 if success else 1)

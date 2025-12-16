@@ -18,7 +18,6 @@ import platform
 import re
 import subprocess
 import zipfile
-from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
 logger = logging.getLogger(__name__)
@@ -38,10 +37,10 @@ class JavaValidator:
     """
     Handles Java validation, detection, and compatibility checking
     """
-    
+
     # LTS Java versions (as of 2025-12-16)
     LTS_VERSIONS = ["8", "11", "17", "21"]
-    
+
     # Architecture mapping
     ARCH_MAPPING = {
         "x86_64": "x64",
@@ -49,19 +48,19 @@ class JavaValidator:
         "aarch64": "aarch64",
         "arm64": "aarch64"
     }
-    
+
     # Minimum and maximum Java version compatibility
     MIN_JAVA_VERSION = 8
     MAX_JAVA_VERSION = 21
-    
+
     def __init__(self):
         """Initialize the Java validator"""
         logger.info("Initialized JavaValidator")
-    
+
     def detect_system_java(self) -> Optional[Dict[str, Union[str, int, bool]]]:
         """
         Comprehensive system Java detection
-        
+
         Returns:
             Dict with Java information or None if not found
         """
@@ -111,7 +110,7 @@ class JavaValidator:
         except Exception as e:
             logger.error(f"Java detection failed: {e}")
             return None
-    
+
     def _find_java_command(self) -> Optional[str]:
         """Find java command in PATH"""
         try:
@@ -143,7 +142,7 @@ class JavaValidator:
                 return path
 
         return None
-    
+
     def _get_java_version_info(self, java_cmd: str) -> Optional[Dict[str, Union[str, int]]]:
         """Get detailed Java version information"""
         try:
@@ -196,7 +195,7 @@ class JavaValidator:
         except Exception as e:
             logger.error(f"Failed to get Java version info: {e}")
             return None
-    
+
     def _get_java_home(self, java_cmd: str) -> Optional[str]:
         """Get JAVA_HOME from java command path"""
         try:
@@ -229,7 +228,7 @@ class JavaValidator:
             logger.debug(f"Could not determine JAVA_HOME: {e}")
 
         return None
-    
+
     def _detect_java_type(self, java_cmd: str) -> str:
         """Detect Java distribution type"""
         try:
@@ -259,27 +258,27 @@ class JavaValidator:
 
         except Exception:
             return "Unknown"
-    
+
     def _check_java_compatibility(self, version_info: Dict) -> bool:
         """
         Check if Java version is compatible with jar2appimage
-        
+
         Args:
             version_info: Java version information dictionary
-            
+
         Returns:
             True if compatible, False otherwise
         """
         major_version = version_info["major"]
         return self.MIN_JAVA_VERSION <= major_version <= self.MAX_JAVA_VERSION
-    
+
     def analyze_jar_requirements(self, jar_path: str) -> Dict[str, Any]:
         """
         Analyze JAR file for Java version requirements
-        
+
         Args:
             jar_path: Path to JAR file
-            
+
         Returns:
             Dict with Java requirement information
         """
@@ -316,14 +315,14 @@ class JavaValidator:
 
         logger.info(f"✅ JAR analysis complete: {requirements}")
         return requirements
-    
+
     def _parse_manifest_requirements(self, manifest_content: str) -> Dict[str, str]:
         """
         Parse manifest for Java version requirements
-        
+
         Args:
             manifest_content: Manifest file content
-            
+
         Returns:
             Dictionary with parsed requirements
         """
@@ -341,19 +340,19 @@ class JavaValidator:
                         requirements['min_java_version'] = version_match.group(1)
 
         return requirements
-    
+
     def check_java_download_needed(
-        self, 
-        system_java: Optional[Dict], 
+        self,
+        system_java: Optional[Dict],
         jar_requirements: Dict
     ) -> Tuple[bool, str]:
         """
         Determine if Java download is needed
-        
+
         Args:
             system_java: System Java information or None
             jar_requirements: JAR requirements analysis
-            
+
         Returns:
             Tuple of (download_needed, reason)
         """
@@ -377,11 +376,11 @@ class JavaValidator:
             return True, "JAR requires Java modules, bundled Java recommended"
 
         return False, "System Java is sufficient"
-    
+
     def detect_platform(self) -> Dict[str, str]:
         """
         Detect current platform and architecture
-        
+
         Returns:
             Dictionary with platform information
         """
@@ -397,26 +396,26 @@ class JavaValidator:
             "is_windows": system == "Windows",
             "supports_appimage": system == "Linux"
         }
-    
+
     def _map_architecture(self, machine: str) -> str:
         """
         Map machine architecture to standardized format
-        
+
         Args:
             machine: Raw machine architecture string
-            
+
         Returns:
             Mapped architecture string
         """
         return self.ARCH_MAPPING.get(machine, machine)
-    
+
     def validate_java_installation(self, java_info: Dict[str, Any]) -> bool:
         """
         Validate a Java installation
-        
+
         Args:
             java_info: Java information dictionary
-            
+
         Returns:
             True if validation passes
         """
@@ -433,7 +432,7 @@ class JavaValidator:
                 text=True,
                 timeout=10
             )
-            
+
             if result.returncode != 0:
                 return False
 
@@ -444,7 +443,7 @@ class JavaValidator:
                 text=True,
                 timeout=10
             )
-            
+
             return result.returncode == 0
 
         except Exception as e:

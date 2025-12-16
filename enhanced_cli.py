@@ -16,14 +16,13 @@ try:
     from cli_helper import show_help
     from config_manager import ConfigManager, auto_discover_config
     from jar2appimage.core import Jar2AppImage
-    from jar2appimage.java_bundler import JavaBundler
 except ImportError as e:
     print(f"❌ Import error: {e}")
     print("Make sure you're running this from the project root directory")
     sys.exit(1)
 
 
-def main():
+def main():  # noqa: C901
     parser = argparse.ArgumentParser(
         description="Convert JAR files to AppImage executables with advanced features",
         formatter_class=argparse.RawDescriptionHelpFormatter,

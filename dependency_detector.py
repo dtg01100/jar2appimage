@@ -72,7 +72,7 @@ class DependencyDetector:
 
         maven_count = len(analysis_result['maven_dependencies'])
         library_count = len(analysis_result['library_dependencies'])
-        
+
         logger.info(f"Analysis complete - Found {maven_count} Maven dependencies, {library_count} library dependencies")
         print(f"  📦 Found {maven_count} Maven dependencies")
         print(f"  📚 Found {library_count} library dependencies")
@@ -459,16 +459,16 @@ def generate_dependency_report(jar_path: str) -> str:
 if __name__ == "__main__":
     # Setup logging for CLI mode
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
-    
+
     if len(sys.argv) != 2:
         print("Usage: python dependency_detector.py <jar_file>")
         sys.exit(1)
 
     jar_file = sys.argv[1]
     logger.info(f"Starting dependency detection for: {jar_file}")
-    
+
     detector = DependencyDetector()
     report = detector.generate_dependency_report(jar_file)
     print(report)
-    
+
     logger.info("Dependency detection completed successfully")

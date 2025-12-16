@@ -248,10 +248,10 @@ def show_java_summary():
         logger.error(f"Could not get Java summary: {e}")
 
 
-def main():
+def main():  # noqa: C901
     # Setup logging for CLI mode
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
-    
+
     parser = argparse.ArgumentParser(
         description="Enhanced jar2appimage with Portable Java Detection and Management",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -486,7 +486,7 @@ Examples:
                 if PORTABLE_JAVA_AVAILABLE and not args.no_portable:
                     print("   • Intelligent Java requirement detection")
                     print("   • User-consented Java downloads")
-                    
+
             logger.info(f"AppImage created successfully: {appimage_path}")
         else:
             print("❌ AppImage creation failed")
