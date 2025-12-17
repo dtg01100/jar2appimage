@@ -86,7 +86,7 @@ def check_jar2appimage_support():
     return True
 
 
-def check_java_requirements(jar_path: str, use_portable: bool = True) -> tuple:
+def check_java_requirements(jar_path: str, use_portable: bool = True, interactive: bool = True, non_interactive_answer: bool = True) -> tuple:
     """
     Check Java requirements using portable Java manager
 
@@ -103,8 +103,8 @@ def check_java_requirements(jar_path: str, use_portable: bool = True) -> tuple:
     try:
         logger.info(f"Checking Java requirements for JAR: {jar_path}")
         # Use the comprehensive portable Java manager
-        java_version, download_consented = detect_and_manage_java(jar_path, interactive=True)
-        portable_manager = PortableJavaManager()
+        java_version, download_consented = detect_and_manage_java(jar_path, interactive=interactive, non_interactive_answer=non_interactive_answer)
+        portable_manager = PortableJavaManager(interactive_mode=interactive, non_interactive_answer=non_interactive_answer)
 
         if java_version:
             print(f"✅ Java version determined: {java_version}")
@@ -274,6 +274,9 @@ Examples:
     parser.add_argument("--clear-java-cache", action="store_true", help="Clear Java download cache")
     parser.add_argument("--force-download", action="store_true", help="Force download Java even if cached version exists")
     parser.add_argument("--check-platform", "-p", action="store_true", help="Check platform compatibility only")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--assume-yes", action="store_true", help="Assume 'yes' to all prompts")
+    group.add_argument("--assume-no", action="store_true", help="Assume 'no' to all prompts")
     return parser
 
 
@@ -319,7 +322,7 @@ def _handle_java_management_commands(args: argparse.Namespace) -> bool:
     return False
 
 
-def _determine_java_version(bundled: bool, java_version: str, jar_path: str) -> str:
+def _determine_java_version(bundled: bool, java_version: str, jar_path: str, interactive: bool, non_interactive_answer: bool) -> str:
     """Determine which Java version to use based on options."""
     if not bundled:
         if java_version == "auto":
@@ -349,7 +352,7 @@ def _determine_java_version(bundled: bool, java_version: str, jar_path: str) -> 
     # Portable Java available
     print("🔍 Using enhanced portable Java detection...")
     logger.info("Using enhanced portable Java detection")
-    detected_java, _, _ = check_java_requirements(jar_path)
+    detected_java, _, _ = check_java_requirements(jar_path, interactive=interactive, non_interactive_answer=non_interactive_answer)
 
     if detected_java:
         if java_version == "auto":
@@ -365,10 +368,10 @@ def _determine_java_version(bundled: bool, java_version: str, jar_path: str) -> 
     return java_version
 
 
-def _create_appimage_bundled(jar_path: Path, args: argparse.Namespace, java_version: str) -> str | None:
+def _create_appimage_bundled(jar_path: Path, args: argparse.Namespace, java_version: str, interactive: bool, non_interactive_answer: bool) -> str | None:
     """Create AppImage with enhanced bundled Java support."""
     if PORTABLE_JAVA_AVAILABLE and not args.no_portable:
-        _, download_consented, portable_manager = check_java_requirements(str(jar_path))
+        _, download_consented, portable_manager = check_java_requirements(str(jar_path), interactive=interactive, non_interactive_answer=non_interactive_answer)
         if download_consented and portable_manager:
             handle_java_download(portable_manager, java_version)
         return create_appimage_with_portable_java(
@@ -429,7 +432,7 @@ def _validate_jar_file(args: argparse.Namespace) -> Path:
 
 
 def _setup_and_validate(args: argparse.Namespace) -> tuple:
-    """Setup and validate all options. Returns (bundled, java_version, jar_path)."""
+    """Setup and validate all options. Returns (bundled, java_version, jar_path, interactive, non_interactive_answer)."""
     jar_path = _validate_jar_file(args)
 
     bundled = args.bundled and not args.no_bundled
@@ -438,8 +441,10 @@ def _setup_and_validate(args: argparse.Namespace) -> tuple:
         logger.error("Conflicting bundling options: --bundled and --no-bundled both specified")
         sys.exit(1)
 
-    java_version = _determine_java_version(bundled, args.jdk_version, str(jar_path))
-    return bundled, java_version, jar_path
+    interactive = not args.assume_yes and not args.assume_no
+    non_interactive_answer = True if args.assume_yes else False
+    java_version = _determine_java_version(bundled, args.jdk_version, str(jar_path), interactive, non_interactive_answer)
+    return bundled, java_version, jar_path, interactive, non_interactive_answer
 
 
 def main():
@@ -463,7 +468,7 @@ def main():
         return
 
     # Setup and validate
-    bundled, java_version, jar_path = _setup_and_validate(args)
+    bundled, java_version, jar_path, interactive, non_interactive_answer = _setup_and_validate(args)
 
     print(f"🚀 Creating AppImage for {jar_path.name}...")
     logger.info(f"Creating AppImage for {jar_path.name} with bundled={bundled}, java_version={java_version}")
@@ -478,7 +483,7 @@ def main():
 
     try:
         # Create AppImage
-        appimage_path = _create_appimage_bundled(jar_path, args, java_version) if bundled else _create_appimage_system(jar_path, args, java_version)
+        appimage_path = _create_appimage_bundled(jar_path, args, java_version, interactive, non_interactive_answer) if bundled else _create_appimage_system(jar_path, args, java_version)
 
         if appimage_path:
             _print_appimage_success(appimage_path, bundled)

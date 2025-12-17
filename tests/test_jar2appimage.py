@@ -1,10 +1,12 @@
 """Tests for jar2appimage"""
 
+import subprocess
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import platform
 
 from jar2appimage.analyzer import JarDependencyAnalyzer
 from jar2appimage.core import Jar2AppImage
@@ -25,19 +27,35 @@ class TestJar2AppImage:
             assert converter.app_name == "test"
             assert converter.temp_dir.exists()
 
-    def test_extract_main_class(self):
-        """Test main class extraction"""
-        # This would require creating a proper JAR with manifest
-        # For now, just test the method exists and doesn't crash
+    def test_extract_main_class_from_manifest(self):
+        """Test main class extraction from a real JAR manifest"""
+        jar_path = "test_jars/HelloWorld.jar"
         with tempfile.TemporaryDirectory() as tmpdir:
-            jar_path = Path(tmpdir) / "test.jar"
-            jar_path.touch()
-
-            converter = Jar2AppImage(str(jar_path), tmpdir)
+            converter = Jar2AppImage(jar_path, tmpdir)
             main_class = converter.extract_main_class()
+            assert main_class == "HelloWorld"
 
-            # Should return None for empty JAR
-            assert main_class is None
+    @pytest.mark.skipif(platform.system() != "Linux", reason="AppImage execution only supported on Linux")
+    def test_create_appimage_end_to_end(self):
+        """Test creating an AppImage from HelloWorld.jar and running it"""
+        jar_path = "test_jars/HelloWorld.jar"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Use the context manager to ensure cleanup
+            with Jar2AppImage(jar_path, tmpdir) as converter:
+                appimage_path = converter.create()
+
+                # Ensure the AppImage was created
+                assert Path(appimage_path).exists()
+                assert Path(appimage_path).name == "HelloWorld.AppImage"
+
+                # Make the AppImage executable
+                Path(appimage_path).chmod(0o755)
+
+                # Run the AppImage and capture output
+                result = subprocess.run([appimage_path], capture_output=True, text=True, timeout=30)
+                
+                assert result.returncode == 0
+                assert "Hello, World!" in result.stdout
 
     def test_analyze_dependencies(self):
         """Test dependency analysis"""
@@ -56,7 +74,7 @@ class TestJar2AppImage:
 
                 assert "found_local_jars" in result
                 assert "missing_jars" in result
-                mock_analyze.assert_called_once_with(jar_path)
+                mock_analyze.assert_called_once_with(Path(jar_path))
 
 
 class TestDependencyAnalyzer:

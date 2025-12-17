@@ -176,6 +176,15 @@ class DependencyNode:
     def __repr__(self) -> str:
         return f"DependencyNode({self.dependency.maven_coordinates})"
 
+    def __eq__(self, other):
+        if not isinstance(other, DependencyNode):
+            return NotImplemented
+        return self.dependency == other.dependency
+
+    def __hash__(self):
+        return hash(self.dependency)
+
+
 
 class DependencyGraph:
     """Comprehensive dependency graph management"""

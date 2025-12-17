@@ -54,15 +54,17 @@ class PortableJavaManager:
         "arm64": "aarch64"
     }
 
-    def __init__(self, interactive_mode: bool = True, cache_dir: Optional[str] = None):
+    def __init__(self, interactive_mode: bool = True, cache_dir: Optional[str] = None, non_interactive_answer: bool = True):
         """
         Initialize the portable Java manager
 
         Args:
             interactive_mode: Whether to use interactive prompts
             cache_dir: Directory for caching downloads
+            non_interactive_answer: The answer to return in non-interactive mode (default: True, i.e., 'yes')
         """
         self.interactive_mode = interactive_mode
+        self.non_interactive_answer = non_interactive_answer
         self.current_platform = self._detect_platform()
 
         # Setup cache directory
@@ -481,8 +483,8 @@ class PortableJavaManager:
         logger.info(f"📥 Portable Java recommended: {reason}")
 
         if not self.interactive_mode:
-            logger.info("🔧 Non-interactive mode: downloading Java automatically")
-            return True
+            logger.info(f"🔧 Non-interactive mode: assuming '{'yes' if self.non_interactive_answer else 'no'}'")
+            return self.non_interactive_answer
 
         # Get download information
         download_info = self._get_download_info(java_version)
@@ -574,9 +576,93 @@ class PortableJavaManager:
         print("   • Reused for future AppImages")
         print("   • Can be cleared with --clear-cache")
 
+    def _get_dynamic_download_url(self, java_version: str) -> Optional[str]:
+        """
+        Get dynamic download URL from Adoptium API
+
+        Args:
+            java_version: Java version to download
+
+        Returns:
+            Download URL or None if not found
+        """
+        try:
+            os_type = self.current_platform["system"].lower()
+            arch = self.current_platform["arch"]
+            url = (
+                f"https://api.adoptium.net/v3/binary/latest/{java_version}/ga/{os_type}/{arch}/jre/hotspot/normal/eclipse"
+                f"?project=temurin"
+            )
+            logger.info(f"Trying to resolve Java download URL: {url}")
+            # This request will redirect to the actual download URL
+            with urllib.request.urlopen(url, timeout=10) as response:
+                return response.url
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                logger.warning(f"Java version {java_version} not found on Adoptium API for this platform.")
+            else:
+                logger.error(f"API request failed for Java {java_version}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get dynamic download URL for Java {java_version}: {e}")
+            return None
+
+    # Download thresholds (MB)
+    MIN_DOWNLOAD_SIZE_MB = 10
+
+    def _download_from_url(self, download_url: str, java_version: str) -> Optional[str]:
+        """Download file from URL and cache it.
+
+        Uses Content-Length header when available to validate size; falls back to
+        measuring downloaded size. Small files are removed and considered failures.
+        """
+        try:
+            filename = download_url.split("/")[-1]
+            java_path = self.download_cache / filename
+
+            logger.info(f"📥 Downloading from: {download_url}")
+
+            req = urllib.request.Request(download_url, headers={"User-Agent": "jar2appimage/1.0"})
+            with urllib.request.urlopen(req) as response:
+                # Try to use Content-Length header if present
+                content_length = response.getheader('Content-Length') if hasattr(response, 'getheader') else None
+
+                with open(java_path, 'wb') as f:
+                    shutil.copyfileobj(response, f)
+
+            # Validate size
+            size_bytes = java_path.stat().st_size if java_path.exists() else 0
+            min_bytes = self.MIN_DOWNLOAD_SIZE_MB * 1024 * 1024
+
+            if content_length is not None:
+                try:
+                    content_length_int = int(content_length)
+                except Exception:
+                    content_length_int = None
+            else:
+                content_length_int = None
+
+            if content_length_int is not None:
+                valid = content_length_int >= min_bytes
+            else:
+                valid = size_bytes >= min_bytes
+
+            if java_path.exists() and valid:
+                size_mb = size_bytes // (1024 * 1024)
+                logger.info(f"✅ Downloaded Java {java_version}: {filename} ({size_mb} MB)")
+                return str(java_path)
+            else:
+                logger.error("Download failed or file is too small.")
+                if java_path.exists():
+                    java_path.unlink() # remove corrupted file
+                return None
+        except Exception as e:
+            logger.error(f"Download from URL failed: {e}")
+            return None
+
     def download_portable_java(self, java_version: str, force: bool = False) -> Optional[str]:
         """
-        Download portable Java runtime
+        Download portable Java runtime, using dynamic URLs first.
 
         Args:
             java_version: Java version to download
@@ -585,39 +671,46 @@ class PortableJavaManager:
         Returns:
             Path to downloaded Java archive or None if failed
         """
-        logger.info(f"📥 Downloading portable Java {java_version}...")
+        logger.info(f"📥 Attempting to download portable Java {java_version}...")
 
-        # Check cache first
         if not force:
             cached_file = self._get_cached_java(java_version)
             if cached_file:
                 logger.info(f"📦 Found cached Java {java_version}: {cached_file}")
                 return str(cached_file)
 
+        # Primary method: dynamic URL from API
+        download_url = self._get_dynamic_download_url(java_version)
+        if download_url:
+            downloaded_file = self._download_from_url(download_url, java_version)
+            if downloaded_file:
+                return downloaded_file
+
+        # Fallback to old bundler logic if dynamic download fails
+        logger.warning("Dynamic download failed, trying legacy bundler methods.")
         try:
-            # Try using existing SmartJavaBundler
-            try:
-                from smart_java_bundler import SmartJavaBundler
-                bundler = SmartJavaBundler(java_version=java_version, use_jre=True)
-                downloaded_file = bundler.download_java(str(self.download_cache))
-                if downloaded_file:
-                    self._cache_download(downloaded_file, java_version)
-                    return downloaded_file
-            except ImportError:
-                logger.warning("SmartJavaBundler not available, using fallback")
-
-            # Fallback to manual download
-            return self._fallback_download(java_version)
-
+            from smart_java_bundler import SmartJavaBundler
+            bundler = SmartJavaBundler(java_version=java_version, use_jre=True)
+            downloaded_file = bundler.download_java(str(self.download_cache))
+            if downloaded_file:
+                self._cache_download(downloaded_file, java_version)
+                return downloaded_file
+        except ImportError:
+            logger.error("SmartJavaBundler not available, and all download attempts failed.")
         except Exception as e:
-            logger.error(f"Download failed: {e}")
-            return None
+            logger.error(f"Legacy bundler download failed: {e}")
+        
+        logger.error(f"All methods to download Java {java_version} failed.")
+        return None
+
+    # Cached thresholds (MB)
+    MIN_CACHED_SIZE_MB = 50
 
     def _get_cached_java(self, java_version: str) -> Optional[Path]:
         """Check for cached Java download"""
         cache_pattern = f"*{java_version}*.tar.gz"
         for cached_file in self.download_cache.glob(cache_pattern):
-            if cached_file.exists() and cached_file.stat().st_size > 50 * 1024 * 1024:  # At least 50MB
+            if cached_file.exists() and cached_file.stat().st_size > self.MIN_CACHED_SIZE_MB * 1024 * 1024:
                 return cached_file
         return None
 
@@ -634,44 +727,6 @@ class PortableJavaManager:
                     logger.info(f"📦 Cached Java {java_version}: {cache_path}")
         except Exception as e:
             logger.warning(f"Failed to cache download: {e}")
-
-    def _fallback_download(self, java_version: str) -> Optional[str]:
-        """Fallback download method using hardcoded URLs"""
-        fallbacks = {
-            "8": "https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u412-b08/OpenJDK8U-jre_x64_linux_hotspot_8u412b08.tar.gz",
-            "11": "https://github.com/adoptium/temurin11-binaries/releases/download/jdk-11.0.23%2B9/OpenJDK11U-jre_x64_linux_hotspot_11.0.23_9.tar.gz",
-            "17": "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.12%2B7/OpenJDK17U-jre_x64_linux_hotspot_17.0.12_7.tar.gz",
-            "21": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.4%2B7/OpenJDK21U-jre_x64_linux_hotspot_21.0.4_7.tar.gz",
-        }
-
-        download_url = fallbacks.get(java_version)
-        if not download_url:
-            logger.error(f"No fallback URL for Java {java_version}")
-            return None
-
-        try:
-            import urllib.request
-
-            filename = download_url.split("/")[-1]
-            java_path = self.download_cache / filename
-
-            logger.info("📥 Downloading from fallback URL...")
-            logger.info(f"   URL: {download_url}")
-
-            req = urllib.request.Request(download_url, headers={"User-Agent": "jar2appimage/1.0"})
-            with urllib.request.urlopen(req) as response:
-                with open(java_path, 'wb') as f:
-                    shutil.copyfileobj(response, f)
-
-            if java_path.exists():
-                size_mb = java_path.stat().st_size // (1024 * 1024)
-                logger.info(f"✅ Downloaded Java {java_version}: {filename} ({size_mb} MB)")
-                return str(java_path)
-
-        except Exception as e:
-            logger.error(f"Fallback download failed: {e}")
-
-        return None
 
     def extract_java_runtime(self, java_archive: str, extract_dir: str) -> Optional[str]:
         """
@@ -830,18 +885,19 @@ class PortableJavaManager:
 
 # Convenience functions for easy integration
 
-def detect_and_manage_java(jar_path: str, interactive: bool = True) -> Tuple[Optional[str], bool]:
+def detect_and_manage_java(jar_path: str, interactive: bool = True, non_interactive_answer: bool = True) -> Tuple[Optional[str], bool]:
     """
     Detect system Java and offer portable Java if needed
 
     Args:
         jar_path: Path to JAR file
         interactive: Whether to use interactive prompts
+        non_interactive_answer: The answer to return in non-interactive mode
 
     Returns:
         Tuple of (java_version_to_use, download_consented)
     """
-    manager = PortableJavaManager(interactive_mode=interactive)
+    manager = PortableJavaManager(interactive_mode=interactive, non_interactive_answer=non_interactive_answer)
 
     # Detect system Java
     system_java = manager.detect_system_java()
@@ -857,10 +913,7 @@ def detect_and_manage_java(jar_path: str, interactive: bool = True) -> Tuple[Opt
         java_version = manager.get_latest_lts_version()
 
         # Offer portable Java
-        if interactive:
-            consent = manager.offer_portable_java(download_needed, reason, java_version)
-        else:
-            consent = True
+        consent = manager.offer_portable_java(download_needed, reason, java_version)
 
         if consent:
             return java_version, True
