@@ -73,5 +73,37 @@ class TestPortableJavaManager:
             mock_get_dynamic_url.assert_called_once_with("17")
             mock_download_from_url.assert_called_once_with("https://example.com/dynamic.tar.gz", "17")
 
+    @patch('portable_java_manager.PortableJavaManager._get_cached_java')
+    @patch('portable_java_manager.PortableJavaManager._cache_download')
+    @patch('smart_java_bundler.SmartJavaBundler')
+    @patch('portable_java_manager.PortableJavaManager._download_from_url')
+    @patch('portable_java_manager.PortableJavaManager._get_dynamic_download_url')
+    def test_download_portable_java_fallback_to_bundler(self, mock_get_dynamic_url, mock_download_from_url, mock_bundler_class, mock_cache_download, mock_get_cached):
+        """Test that download_portable_java falls back to SmartJavaBundler when dynamic fails"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = PortableJavaManager(cache_dir=tmpdir)
+
+            # Mock no cached version
+            mock_get_cached.return_value = None
+
+            # Mock dynamic URL fails
+            mock_get_dynamic_url.return_value = None
+
+            # Mock download_from_url fails
+            mock_download_from_url.return_value = None
+
+            # Mock SmartJavaBundler success
+            mock_bundler_instance = mock_bundler_class.return_value
+            mock_bundler_instance.download_java.return_value = "/path/to/bundler/java.tar.gz"
+
+            result = manager.download_portable_java("17")
+
+            assert result == "/path/to/bundler/java.tar.gz"
+            mock_get_dynamic_url.assert_called_once_with("17")
+            mock_download_from_url.assert_not_called()  # Since dynamic URL is None
+            mock_bundler_class.assert_called_once_with(java_version="17", use_jre=True)
+            mock_bundler_instance.download_java.assert_called_once_with(str(manager.download_cache))
+            mock_cache_download.assert_called_once()
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

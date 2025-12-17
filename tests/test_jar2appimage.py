@@ -117,5 +117,87 @@ class TestJavaRuntimeManager:
         assert not manager.temp_dir.exists()
 
 
+class TestIntegrationRealWorldJars:
+    """Integration tests using real-world JAR files from real_world_jars/"""
+
+    @pytest.mark.skipif(platform.system() != "Linux", reason="AppImage execution only supported on Linux")
+    def test_sqlworkbench_jar_conversion(self):
+        """Test converting SQL Workbench JAR to AppImage"""
+        jar_path = "real_world_jars/sqlworkbench.jar"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with Jar2AppImage(jar_path, tmpdir) as converter:
+                appimage_path = converter.create()
+
+                # Ensure the AppImage was created
+                assert Path(appimage_path).exists()
+                assert Path(appimage_path).name == "sqlworkbench.AppImage"
+                assert Path(appimage_path).stat().st_size > 0  # Should not be empty
+
+    @pytest.mark.skipif(platform.system() != "Linux", reason="AppImage execution only supported on Linux")
+    def test_tika_app_jar_conversion(self):
+        """Test converting Tika App JAR to AppImage"""
+        jar_path = "real_world_jars/tika-app-3.2.3.jar"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with Jar2AppImage(jar_path, tmpdir) as converter:
+                appimage_path = converter.create()
+
+                # Ensure the AppImage was created
+                assert Path(appimage_path).exists()
+                assert Path(appimage_path).name == "tika-app-3.2.3.AppImage"
+                assert Path(appimage_path).stat().st_size > 0  # Should not be empty
+
+    def test_sqlworkbench_main_class_extraction(self):
+        """Test main class extraction from SQL Workbench JAR"""
+        jar_path = "real_world_jars/sqlworkbench.jar"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            converter = Jar2AppImage(jar_path, tmpdir)
+            main_class = converter.extract_main_class()
+
+            # SQL Workbench should have a main class
+            assert main_class is not None
+            assert isinstance(main_class, str)
+            assert len(main_class) > 0
+
+    def test_tika_app_main_class_extraction(self):
+        """Test main class extraction from Tika App JAR"""
+        jar_path = "real_world_jars/tika-app-3.2.3.jar"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            converter = Jar2AppImage(jar_path, tmpdir)
+            main_class = converter.extract_main_class()
+
+            # Tika App should have a main class
+            assert main_class is not None
+            assert isinstance(main_class, str)
+            assert len(main_class) > 0
+
+    def test_sqlworkbench_dependency_analysis(self):
+        """Test dependency analysis on SQL Workbench JAR"""
+        jar_path = "real_world_jars/sqlworkbench.jar"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            converter = Jar2AppImage(jar_path, tmpdir)
+            dependencies = converter.analyze_dependencies()
+
+            # Should return a dict with expected keys
+            assert isinstance(dependencies, dict)
+            assert "found_local_jars" in dependencies
+            assert "missing_jars" in dependencies
+            assert isinstance(dependencies["found_local_jars"], list)
+            assert isinstance(dependencies["missing_jars"], list)
+
+    def test_tika_app_dependency_analysis(self):
+        """Test dependency analysis on Tika App JAR"""
+        jar_path = "real_world_jars/tika-app-3.2.3.jar"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            converter = Jar2AppImage(jar_path, tmpdir)
+            dependencies = converter.analyze_dependencies()
+
+            # Should return a dict with expected keys
+            assert isinstance(dependencies, dict)
+            assert "found_local_jars" in dependencies
+            assert "missing_jars" in dependencies
+            assert isinstance(dependencies["found_local_jars"], list)
+            assert isinstance(dependencies["missing_jars"], list)
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
