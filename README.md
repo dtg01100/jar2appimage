@@ -178,7 +178,9 @@ python enhanced_jar2appimage_cli.py application.jar --no-bundled --no-portable
 - `--name, -n`: Application name
 - `--output, -o`: Output directory
 - `--arch, -a`: Target architecture (auto-detected by default)
-- `--bundled`: Create AppImage with bundled portable Java for true portability
+- `--no-bundled`: Create AppImage using system Java only (opt-out of bundling)
+- `--bundled`: Create AppImage with bundled portable Java (default behavior)
+- `--no-supporting-files`: Disable bundling of supporting files (config, assets, etc.)
 - `--no-portable`: Disable portable Java detection and offering
 - `--jdk-version`: Java version for bundling (8, 11, 17, 21, auto)
 - `--java-summary`: Show Java detection summary and exit

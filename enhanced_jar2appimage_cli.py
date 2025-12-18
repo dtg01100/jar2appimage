@@ -155,7 +155,7 @@ def handle_java_download(portable_manager: PortableJavaManager, java_version: st
 
 
 def create_appimage_with_portable_java(jar_path: str, output_dir: str, bundled: bool,
-                                      java_version: str, portable_manager: PortableJavaManager = None):
+                                      java_version: str, bundle_supporting_files: bool = True, portable_manager: PortableJavaManager = None):
     """
     Create AppImage with portable Java integration
     """
@@ -190,7 +190,8 @@ def create_appimage_with_portable_java(jar_path: str, output_dir: str, bundled: 
             jar_path,
             output_dir,
             bundled=bundled,
-            jdk_version=java_version
+            jdk_version=java_version,
+            bundle_supporting_files=bundle_supporting_files
         )
         appimage_path = app.create()
 
@@ -255,9 +256,10 @@ def _setup_argument_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s app.jar                                    # Basic AppImage with portable Java detection
-  %(prog)s app.jar --bundled                          # Self-contained AppImage with portable Java
-  %(prog)s app.jar --no-portable                      # Use system Java only
+  %(prog)s app.jar                                    # Create self-contained AppImage with bundled Java and supporting files (default)
+  %(prog)s app.jar --no-bundled                       # Use system Java only (opt-out of bundling)
+  %(prog)s app.jar --no-supporting-files              # Bundle Java but exclude supporting files
+  %(prog)s app.jar --no-bundled --no-supporting-files # Use system Java and exclude supporting files
   %(prog)s --java-summary                             # Show Java detection summary
   %(prog)s --clear-java-cache                         # Clear Java download cache
         """
@@ -265,9 +267,10 @@ Examples:
 
     parser.add_argument("jar_file", nargs="?", help="JAR file to convert")
     parser.add_argument("--output-dir", "-o", default=".", help="Output directory for AppImage (default: current directory)")
-    parser.add_argument("--bundled", action="store_true", help="Create AppImage with bundled portable Java for true portability")
-    parser.add_argument("--no-bundled", action="store_true", help="Create AppImage using system Java (default behavior)")
+    parser.add_argument("--no-bundled", action="store_true", help="Create AppImage using system Java (opt-out of Java bundling)")
+    parser.add_argument("--bundled", action="store_true", help="Create AppImage with bundled portable Java (default behavior)")
     parser.add_argument("--no-portable", action="store_true", help="Disable portable Java detection and offering")
+    parser.add_argument("--no-supporting-files", action="store_true", help="Disable bundling of supporting files (config, assets, etc.)")
     parser.add_argument("--jdk-version", default="auto", choices=["8", "11", "17", "21", "auto"], help="Java version for bundling (default: auto - uses latest LTS)")
     parser.add_argument("--java-summary", action="store_true", help="Show Java detection summary and exit")
     parser.add_argument("--detect-java", action="store_true", help="Detect and analyze system Java installation")
@@ -375,14 +378,20 @@ def _create_appimage_bundled(jar_path: Path, args: argparse.Namespace, java_vers
         if download_consented and portable_manager:
             handle_java_download(portable_manager, java_version)
         return create_appimage_with_portable_java(
-            str(jar_path), args.output_dir, True, java_version, portable_manager
+            str(jar_path), args.output_dir, True, java_version, not args.no_supporting_files, portable_manager
         )
 
     # Fallback to standard creation
     sys.path.insert(0, str(Path(__file__).parent / "src"))
     import jar2appimage
 
-    app = jar2appimage.Jar2AppImage(str(jar_path), args.output_dir, bundled=True, jdk_version=java_version)
+    app = jar2appimage.Jar2AppImage(
+        str(jar_path),
+        args.output_dir,
+        bundled=True,
+        jdk_version=java_version,
+        bundle_supporting_files=not args.no_supporting_files
+    )
     return app.create()
 
 
@@ -391,7 +400,13 @@ def _create_appimage_system(jar_path: Path, args: argparse.Namespace, java_versi
     sys.path.insert(0, str(Path(__file__).parent / "src"))
     import jar2appimage
 
-    app = jar2appimage.Jar2AppImage(str(jar_path), args.output_dir, bundled=False, jdk_version=java_version)
+    app = jar2appimage.Jar2AppImage(
+        str(jar_path),
+        args.output_dir,
+        bundled=False,
+        jdk_version=java_version,
+        bundle_supporting_files=not args.no_supporting_files
+    )
     return app.create()
 
 
@@ -435,11 +450,13 @@ def _setup_and_validate(args: argparse.Namespace) -> tuple:
     """Setup and validate all options. Returns (bundled, java_version, jar_path, interactive, non_interactive_answer)."""
     jar_path = _validate_jar_file(args)
 
-    bundled = args.bundled and not args.no_bundled
+    # Default to bundled=True; user must specify --no-bundled to opt out
     if args.bundled and args.no_bundled:
         print("❌ Cannot use both --bundled and --no-bundled options")
         logger.error("Conflicting bundling options: --bundled and --no-bundled both specified")
         sys.exit(1)
+
+    bundled = not args.no_bundled  # Default to True unless --no-bundled is specified
 
     interactive = not args.assume_yes and not args.assume_no
     non_interactive_answer = True if args.assume_yes else False

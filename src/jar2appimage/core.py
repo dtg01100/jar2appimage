@@ -23,6 +23,7 @@ import os
 import shutil
 import subprocess
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Protocol, cast
 
@@ -107,8 +108,9 @@ class Jar2AppImage:
         self,
         jar_file: str,
         output_dir: str = ".",
-        bundled: bool = False,
+        bundled: bool = True,  # Default to True for portable, self-contained AppImages
         jdk_version: str = "11",
+        bundle_supporting_files: bool = True,  # Whether to bundle supporting files (config, assets, etc.)
         java_bundler: Optional[JavaBundlerProtocol] = None
     ):
         """
@@ -119,6 +121,7 @@ class Jar2AppImage:
             output_dir: Output directory for the AppImage
             bundled: Whether to bundle Java runtime
             jdk_version: Java version to use for bundling
+            bundle_supporting_files: Whether to bundle supporting files (config, assets, etc.)
             java_bundler: Optional Java bundler for dependency injection
         """
         self.jar_file = jar_file
@@ -126,6 +129,7 @@ class Jar2AppImage:
         self.output_dir = Path(output_dir)
         self.bundled = bundled
         self.jdk_version = jdk_version
+        self.bundle_supporting_files = bundle_supporting_files
         self.java_bundler = java_bundler
 
         # Initialize application metadata
@@ -250,15 +254,19 @@ class Jar2AppImage:
             # Step 3: Copy JAR file and store main class
             self._copy_jar_and_main_class(app_dir)
 
-            # Step 4: Handle Java bundling if requested
+            # Step 4: Copy supporting files (config, assets, etc.) if enabled
+            if self.bundle_supporting_files:
+                self._copy_supporting_files(app_dir)
+
+            # Step 5: Handle Java bundling if requested
             if self.bundled:
                 self._handle_java_bundling(app_dir)
 
-            # Step 5: Create desktop file and AppRun script
+            # Step 6: Create desktop file and AppRun script
             self._create_desktop_file(app_dir)
             self._install_apprun(app_dir)
 
-            # Step 6: Create final AppImage
+            # Step 7: Create final AppImage
             appimage_path = self._create_appimage(app_dir)
 
             logger.info(f"AppImage creation completed successfully: {appimage_path}")
@@ -435,6 +443,99 @@ class Jar2AppImage:
         except Exception as e:
             raise ValidationError(f"Failed to copy JAR file or store main class: {e}") from e
 
+    def _copy_supporting_files(self, app_dir: str) -> None:
+        """
+        Identify and copy supporting files for the JAR application.
+
+        This includes common configuration files, assets, libraries, and directories
+        that are typically found alongside JAR files.
+
+        Args:
+            app_dir: AppDir directory path
+        """
+        logger.debug("Copying supporting files for the application")
+
+        try:
+            jar_path = Path(self.jar_file)
+            jar_dir = jar_path.parent
+            jar_name_stem = jar_path.stem  # Name without extension
+
+            # Define file extensions and directories to consider as supporting files
+            supporting_extensions = {
+                '.properties', '.yml', '.yaml', '.json', '.xml', '.conf', '.config',
+                '.txt', '.ini', '.cfg', '.log', '.sql', '.db', '.sqlite', '.jar',
+                '.so', '.dll', '.dylib', '.jnilib', '.dll', '.exe', '.sh', '.bat'
+            }
+
+            # Define directory names that are commonly used for assets/configs
+            supporting_directories = {
+                'config', 'conf', 'assets', 'resources', 'data', 'lib',
+                'libs', 'library', 'libraries', 'native', 'jni', 'plugins',
+                'themes', 'icons', 'fonts', 'images', 'sounds', 'media',
+                'logs', 'log', 'temp', 'tmp', 'cache', 'storage', 'static',
+                'templates', 'views', 'scripts', 'bin', 'tools', 'util'
+            }
+
+            # Destination directories in the AppImage
+            dest_bin_dir = Path(app_dir) / "usr" / "bin"
+            dest_resources_dir = Path(app_dir) / "usr" / "share" / self._app_name
+
+            # Create resources directory if needed
+            dest_resources_dir.mkdir(parents=True, exist_ok=True)
+
+            # Track copied files to avoid duplicates
+            copied_files = set()
+
+            # Copy files from the same directory as the JAR
+            if jar_dir.exists():
+                for item in jar_dir.iterdir():
+                    if item.name == jar_path.name:
+                        continue  # Skip the main JAR file
+
+                    # Check if it's a supporting file based on extension
+                    if item.is_file() and item.suffix.lower() in supporting_extensions:
+                        # Check if it's related to this JAR (name-matching heuristic)
+                        if jar_name_stem.lower() in item.name.lower() or len(jar_name_stem) <= 3:
+                            # For short JAR names, copy any matching file type
+                            dest_file = dest_resources_dir / item.name
+                            shutil.copy2(item, dest_file)
+                            copied_files.add(item.name)
+                            logger.debug(f"Copied supporting file: {item.name}")
+
+                    # Check if it's a supporting directory
+                    elif item.is_dir() and item.name.lower() in supporting_directories:
+                        dest_dir = dest_resources_dir / item.name
+                        if not dest_dir.exists():
+                            shutil.copytree(item, dest_dir, dirs_exist_ok=True)
+                            logger.debug(f"Copied supporting directory: {item.name}")
+
+            # Look for app-specific directories (e.g., "myapp-config", "myapp-data")
+            for item in jar_dir.parent.iterdir() if jar_dir != jar_dir.parent else []:
+                if item.is_dir() and jar_name_stem.lower() in item.name.lower():
+                    # Copy app-specific directory
+                    dest_dir = dest_resources_dir / item.name
+                    if not dest_dir.exists():
+                        shutil.copytree(item, dest_dir, dirs_exist_ok=True)
+                        logger.debug(f"Copied app-specific directory: {item.name}")
+
+            # Create a manifest of supporting files for reference
+            if copied_files:
+                manifest_file = dest_resources_dir / "SUPPORTING_FILES_MANIFEST.txt"
+                with open(manifest_file, 'w') as f:
+                    f.write("# Supporting files automatically bundled with the AppImage\n")
+                    f.write(f"# Source JAR: {jar_path.name}\n")
+                    f.write(f"# Bundle date: {datetime.now().isoformat()}\n\n")
+                    for file_name in sorted(copied_files):
+                        f.write(f"{file_name}\n")
+
+                logger.info(f"Identified and copied {len(copied_files)} supporting files")
+            else:
+                logger.debug("No supporting files identified for bundling")
+
+        except Exception as e:
+            logger.warning(f"Failed to copy supporting files: {e}")
+            # Don't raise exception - supporting files are optional
+
     def _handle_java_bundling(self, app_dir: str) -> None:
         """
         Handle Java bundling process using dependency injection.
@@ -576,11 +677,18 @@ class Jar2AppImage:
         return f"""#!/bin/sh
 HERE="$(dirname "$(readlink -f "${{0}}")")"
 JAR_FILE="${{HERE}}/usr/bin/{self._app_name}.jar"
+RESOURCES_DIR="${{HERE}}/usr/share/{self._app_name}"
+
 if [ ! -f "$JAR_FILE" ]; then
   echo "Error: JAR file not found: $JAR_FILE"
   exit 1
 fi
-exec java -jar "$JAR_FILE" "$@"
+
+# Set up environment for supporting files
+export APP_RESOURCES_DIR="$RESOURCES_DIR"
+
+# Execute with bundled JAR, with resources directory available
+exec java -Dapp.resources.dir="$RESOURCES_DIR" -cp "$JAR_FILE:$RESOURCES_DIR/*:$RESOURCES_DIR" -jar "$JAR_FILE" "$@"
 """
 
     def _create_bundled_apprun_content(self) -> str:
@@ -593,6 +701,7 @@ exec java -jar "$JAR_FILE" "$@"
         return f"""#!/bin/sh
 HERE="$(dirname "$(readlink -f "${{0}}")")"
 JAR_FILE="${{HERE}}/usr/bin/{self._app_name}.jar"
+RESOURCES_DIR="${{HERE}}/usr/share/{self._app_name}"
 
 if [ ! -f "$JAR_FILE" ]; then
   echo "Error: JAR file not found: $JAR_FILE"
@@ -617,8 +726,11 @@ else
     fi
 fi
 
-# Execute with bundled JAR
-exec "$JAVA_CMD" -jar "$JAR_FILE" "$@"
+# Set up environment for supporting files
+export APP_RESOURCES_DIR="$RESOURCES_DIR"
+
+# Execute with bundled JAR, with resources directory available
+exec "$JAVA_CMD" -Dapp.resources.dir="$RESOURCES_DIR" -cp "$JAR_FILE:$RESOURCES_DIR/*:$RESOURCES_DIR" -jar "$JAR_FILE" "$@"
 """
 
     def _create_appimage(self, app_dir: str) -> str:
