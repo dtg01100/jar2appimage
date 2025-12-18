@@ -139,8 +139,9 @@ def main(args: Optional[list[str]] = None) -> int:
     Returns:
         Exit code
     """
-    cli = UnifiedCLI()
-    return cli.run(args)
+    # Use legacy CLI for backward compatibility - this will convert
+    # 'jar2appimage myapp.jar' to 'jar2appimage convert myapp.jar'
+    return run_legacy_cli(args)
 
 
 def _convert_legacy_args(args: Optional[list[str]]) -> tuple[Optional[int], list[str]]:  # noqa: C901

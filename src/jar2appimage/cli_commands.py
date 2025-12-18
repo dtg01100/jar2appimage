@@ -53,11 +53,12 @@ class CLICommandHandler:
             if not validate_output_directory(args.output_dir):
                 return 1
 
-            # Determine bundling mode
-            bundled = args.bundled and not args.no_bundled
+            # Determine bundling mode: Default to bundled=True; user must specify --no-bundled to opt out
             if args.bundled and args.no_bundled:
                 print("❌ Cannot use both --bundled and --no-bundled options")
                 return 1
+
+            bundled = not args.no_bundled  # Default to True unless --no-bundled is specified
 
             # Handle Java version selection
             java_version = self._handle_java_version_selection(args, bundled)
@@ -189,7 +190,8 @@ class CLICommandHandler:
                 jar_file=args.jar_file,
                 output_dir=args.output_dir,
                 bundled=bundled,
-                jdk_version=java_version
+                jdk_version=java_version,
+                bundle_supporting_files=not args.no_supporting_files  # Bundle supporting files unless opted out
             )
 
             # Note: Additional options like name, main_class, icon, category

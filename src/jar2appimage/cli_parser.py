@@ -33,12 +33,14 @@ class CLIParser:
             formatter_class=argparse.RawDescriptionHelpFormatter,
             epilog="""
 Examples:
-  %(prog)s app.jar                                    # Basic conversion
-  %(prog)s app.jar --bundled --jdk-version 17        # Self-contained AppImage
-  %(prog)s app.jar --name "My App" --icon app.png     # With metadata
-  %(prog)s --check-platform                           # Platform compatibility check
-  %(prog)s --java-summary                             # Java detection summary
-  %(prog)s --validate app.AppImage                    # Validate existing AppImage
+  %(prog)s convert app.jar                                    # Create self-contained AppImage with bundled Java and supporting files (default)
+  %(prog)s convert app.jar --no-bundled                      # Use system Java only (opt-out of bundling)
+  %(prog)s convert app.jar --no-supporting-files             # Bundle Java but exclude supporting files
+  %(prog)s convert app.jar --bundled --jdk-version 17        # Self-contained AppImage with specific Java version
+  %(prog)s convert app.jar --name "My App" --icon app.png    # With metadata
+  %(prog)s --check-platform                                  # Platform compatibility check
+  %(prog)s --java-summary                                    # Java detection summary
+  %(prog)s --validate app.AppImage                           # Validate existing AppImage
             """
         )
 
@@ -125,15 +127,15 @@ Examples:
         java_group = convert_parser.add_argument_group("Java Options")
 
         java_group.add_argument(
-            "--bundled",
+            "--no-bundled",
             action="store_true",
-            help="Create AppImage with bundled Java runtime for true portability"
+            help="Create AppImage using system Java (opt-out of Java bundling)"
         )
 
         java_group.add_argument(
-            "--no-bundled",
+            "--bundled",
             action="store_true",
-            help="Create AppImage using system Java (default behavior)"
+            help="Create AppImage with bundled portable Java (default behavior)"
         )
 
         java_group.add_argument(
@@ -141,6 +143,12 @@ Examples:
             default="auto",
             choices=["8", "11", "17", "21", "auto"],
             help="Java version for bundling (default: auto - uses latest LTS)"
+        )
+
+        java_group.add_argument(
+            "--no-supporting-files",
+            action="store_true",
+            help="Disable bundling of supporting files (config, assets, etc.)"
         )
 
         java_group.add_argument(
