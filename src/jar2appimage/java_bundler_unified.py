@@ -740,7 +740,12 @@ class JavaExtractor:
                     for d in dirs:
                         os.chmod(os.path.join(root, d), 0o755)
                     for f in files:
-                        os.chmod(os.path.join(root, f), 0o644)
+                        filepath = os.path.join(root, f)
+                        # Make executable files executable (binaries, scripts)
+                        if os.access(filepath, os.X_OK) or f in ['java', 'jfr', 'jrunscript', 'jwebserver', 'keytool', 'rmiregistry']:
+                            os.chmod(filepath, 0o755)
+                        else:
+                            os.chmod(filepath, 0o644)
 
             # Find the actual Java directory
             java_dir = None
@@ -821,13 +826,13 @@ class AppImageBundlingStrategy:
             java_dir: Directory containing extracted Java
             jar_path: Path to application JAR
             app_name: Application name
-            output_dir: Output directory
+            output_dir: Output directory (this is already the 'usr' directory in AppImage context)
 
         Returns:
             Path to bundled application directory
         """
         java_dir_path = Path(java_dir)
-        appimage_java_dir = Path(output_dir) / "usr" / "java"
+        appimage_java_dir = Path(output_dir) / "java"
 
         appimage_java_dir.mkdir(parents=True, exist_ok=True)
 

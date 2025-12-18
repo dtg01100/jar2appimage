@@ -57,10 +57,11 @@ class JavaAutoDownloader:
     def _get_latest_lts_from_api(self) -> Optional[str]:
         """Get latest LTS version from Adoptium API by checking all LTS versions"""
         try:
-            available_versions = []
+            # Sort LTS versions in descending order to check the latest ones first
+            lts_versions_sorted = sorted([int(v) for v in self.LTS_VERSIONS], reverse=True)
 
-            # Check each LTS version to find all available ones
-            for lts_version in self.LTS_VERSIONS:
+            # Check each LTS version starting from the latest to find the first available one
+            for lts_version in lts_versions_sorted:
                 try:
                     # Query for the latest release of this specific LTS version
                     api_url = f"https://api.adoptium.net/v3/assets/feature_releases/{lts_version}/ga?architecture=x64&image_type=jdk&os=linux&sort_method=DATE&sort_order=DESC"
@@ -77,15 +78,12 @@ class JavaAutoDownloader:
 
                     # Check if we got valid data for this version
                     if data and len(data) > 0:
-                        available_versions.append(int(lts_version))
+                        # Return the first available LTS version (which is the latest since we sorted in descending order)
+                        return str(lts_version)
 
                 except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError, Exception):
                     # Continue to next version if this one fails
                     continue
-
-            # Return the highest available LTS version
-            if available_versions:
-                return str(max(available_versions))
 
             return None
 

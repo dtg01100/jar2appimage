@@ -708,23 +708,20 @@ if [ ! -f "$JAR_FILE" ]; then
   exit 1
 fi
 
-# Priority 1: Try bundled Java (if available)
+# Guarantee use of bundled Java - no fallback to system Java
 BUNDLED_JAVA="${{HERE}}/usr/java/bin/java"
-if [ -f "$BUNDLED_JAVA" ]; then
-    export JAVA_HOME="${{HERE}}/usr/java"
-    export PATH="${{HERE}}/usr/java/bin:$PATH"
-    JAVA_CMD="$BUNDLED_JAVA"
-    echo "Using bundled Java: $($JAVA_CMD -version 2>&1 | head -1)"
-else
-    # Priority 2: Fall back to system Java
-    JAVA_CMD="java"
-    if command -v "$JAVA_CMD" >/dev/null 2>&1; then
-        echo "Using system Java: $($JAVA_CMD -version 2>&1 | head -1)"
-    else
-        echo "Error: No Java runtime found - neither bundled nor system Java available"
-        exit 1
-    fi
+if [ ! -f "$BUNDLED_JAVA" ]; then
+    echo "Error: Bundled Java not found at expected location: $BUNDLED_JAVA"
+    echo "This AppImage was created with bundled Java but the Java runtime is missing."
+    echo "This indicates an error in the AppImage creation process."
+    exit 1
 fi
+
+export JAVA_HOME="${{HERE}}/usr/java"
+export PATH="${{HERE}}/usr/java/bin:$PATH"
+JAVA_CMD="$BUNDLED_JAVA"
+
+echo "Using bundled Java: $($JAVA_CMD -version 2>&1 | head -1)"
 
 # Set up environment for supporting files
 export APP_RESOURCES_DIR="$RESOURCES_DIR"
