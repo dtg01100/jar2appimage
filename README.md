@@ -4,13 +4,14 @@ A Python tool to convert Java JAR files into portable AppImage executables with 
 
 ## Features
 
-- Converts JAR files to AppImage format
+- Converts JAR files to AppImage format with a single command
 - **Automatic on-demand download of appimagetool** - no need to install separately
-- **🆕 Portable Java Support** - Intelligent Java detection and user-consented downloads
+- **🆕 Default to Portable Java** - Bundles Java by default (opt-out with --no-bundled) for maximum portability
+- **📦 Automatic Supporting Files Bundling** - Detects and bundles configs, assets, data, and libraries by default
 - **🔍 Smart Java Analysis** - Automatic JAR requirement analysis and version detection
-- **📦 Self-Contained AppImages** - Bundle portable Java for true portability
 - **🤝 User Consent System** - Explicit opt-in for Java downloads with clear information
 - **⚡ LTS Java Versions** - Automatic selection of latest stable Java releases (8, 11, 17, 21)
+- **✨ Does The Right Thing** - Just run `python enhanced_jar2appimage_cli.py your.jar` for the best outcome
 - JAR dependency analysis and classpath management
 - Desktop integration with .desktop files
 - Cross-platform AppImage generation
@@ -74,19 +75,31 @@ uv tool install .
 
 ## Usage
 
-### Basic usage (automatic detection)
+### One Command Usage (Does the Right Thing™)
 ```bash
 python enhanced_jar2appimage_cli.py application.jar
 ```
+
+This single command will automatically:
+- ✅ Detect if system Java is available and compatible
+- ✅ Automatically bundle the latest LTS Java (21) if needed
+- ✅ Analyze your JAR for specific requirements
+- ✅ Bundle supporting files (configs, data, assets) if found
+- ✅ Create a self-contained, portable AppImage
+- ✅ Ask for consent when downloading Java (or use `--assume-yes` for automation)
 
 ### With custom output directory:
 ```bash
 python enhanced_jar2appimage_cli.py application.jar --output ~/Applications
 ```
 
-### Bundled with portable Java (consent required)
+### Override defaults (opt-out approach):
 ```bash
-python enhanced_jar2appimage_cli.py application.jar --bundled
+# Use system Java only (opt-out of Java bundling)
+python enhanced_jar2appimage_cli.py application.jar --no-bundled
+
+# Bundle Java but exclude supporting files
+python enhanced_jar2appimage_cli.py application.jar --no-supporting-files
 ```
 
 ### Java management commands
@@ -100,9 +113,29 @@ python enhanced_jar2appimage_cli.py --detect-java
 # Clear Java download cache
 python enhanced_jar2appimage_cli.py --clear-java-cache
 
-# Disable portable Java detection (use system Java only)
+# Use system Java only (opt-out of portable Java detection)
 python enhanced_jar2appimage_cli.py application.jar --no-portable
+
+# Skip bundling supporting files (config, assets, etc.)
+python enhanced_jar2appimage_cli.py application.jar --no-supporting-files
 ```
+
+### Quick Start - Just Works! ⚡
+
+Need to convert your JAR to an AppImage? Just run:
+
+```bash
+python enhanced_jar2appimage_cli.py your-application.jar
+```
+
+That's it! The system will:
+
+1. **Detect your situation** - Check if system Java is available and compatible
+2. **Offer portable Java** - Automatically suggest bundling the latest LTS Java if needed
+3. **Analyze your app** - Scan your JAR for specific Java version requirements
+4. **Bundle supporting files** - Automatically detect and include related config files and resources
+5. **Create portable AppImage** - Generate a self-contained executable that works everywhere
+6. **Ask for consent** - Only downloads Java when you say yes (or use `--assume-yes` to skip prompts)
 
 ### First Run
 
@@ -119,38 +152,24 @@ chmod +x appimagetool-x86_64.AppImage
 sudo mv appimagetool-x86_64.AppImage /usr/local/bin/appimagetool
 ```
 
+## Philosophy - "Do The Right Thing" ✨
+
+The default behavior has been carefully designed for the best user experience:
+
+- **Portable by default** - Your JAR + Java Runtime in a single file
+- **Self-contained** - Works on any Linux without external dependencies
+- **Smart detection** - Automatically bundles supporting files and configs
+- **User-controlled** - Consent required for all downloads
+- **One command** - Just `python enhanced_jar2appimage_cli.py your-app.jar` and you're done
+
+The defaults are chosen for maximum compatibility and usability. Use `--no-bundled` or `--no-supporting-files` to opt out of specific behaviors.
+
 ## Usage Examples
 
-### System Java Available (Automatic Detection)
+### Default Behavior (Self-Contained AppImage Creation)
 ```bash
-# Detects system Java and analyzes JAR requirements
+# Create self-contained AppImage with bundled Java and supporting files (default)
 python enhanced_jar2appimage_cli.py application.jar
-
-# Output will show:
-# ✅ Java version determined: 17
-# 🚀 Creating AppImage for application.jar...
-# ✅ AppImage created successfully!
-```
-
-### No System Java (Portable Java Offering)
-```bash
-# System will analyze JAR and offer portable Java
-python enhanced_jar2appimage_cli.py application.jar
-
-# Output will show consent prompt:
-# 🔍 System Java Analysis: No compatible Java found
-# 📦 Portable Java Analysis: JAR requires Java 17 or higher
-# 
-# Download Java 21 (latest LTS)? [Y/n/i]:
-# Y = Download and bundle
-# n = Skip, use system Java if available  
-# i = Show detailed information
-```
-
-### Bundled AppImage Creation
-```bash
-# Create self-contained AppImage with portable Java
-python enhanced_jar2appimage_cli.py application.jar --bundled
 
 # Output will show:
 # 🎯 Auto-detected Java version: 21
@@ -160,6 +179,28 @@ python enhanced_jar2appimage_cli.py application.jar --bundled
 # 📦 Includes portable Java 21
 #   Self-contained AppImage (no external dependencies)
 ```
+
+### System Java Mode (Opt-Out of Bundling)
+```bash
+# Use system Java only (opt-out of Java bundling)
+python enhanced_jar2appimage_cli.py application.jar --no-bundled
+
+# Output will show:
+# ✅ Java version determined: 17
+# 🚀 Creating AppImage for application.jar...
+# ✅ AppImage created successfully!
+```
+
+### Supporting Files Bundling
+```bash
+# By default, supporting files are automatically detected and bundled:
+# - Config files: *.properties, *.json, *.yml, *.xml, etc.
+# - Directories: config/, data/, assets/, lib/, etc.
+# - Files matching JAR name pattern
+
+# To exclude supporting files (opt-out):
+python enhanced_jar2appimage_cli.py application.jar --no-supporting-files
+````
 
 ### Advanced Options
 ```bash
